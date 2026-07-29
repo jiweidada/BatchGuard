@@ -11,7 +11,7 @@ GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
 Git 状态、未提交文件和下一步边界。每个阶段实现、验证或提交状态发生变化后，
 同步更新该交接文档，避免依赖聊天记录传递上下文。
 
-项目扩展时遵循 `docs/项目结构.md`：公共核心头文件放入
+项目扩展时遵循 `docs/设计/项目结构.md`：公共核心头文件放入
 `include/batchguard/core/`，实现放入 `src/core/`，命令行代码放入
 `apps/cli/`，测试分别放入 `tests/unit/` 和 `tests/integration/`。核心模块
 不得依赖 CLI 或未来的 GUI，也不要在 `main.cpp` 中堆积业务逻辑。
@@ -42,7 +42,7 @@ RAII、值语义、`enum class`、显式单参数构造函数，并用 `std::err
 类型使用 `PascalCase`，函数、参数和局部变量使用 `lowerCamelCase`，私有
 成员使用 `lowerCamelCase_`，常量使用 `kPascalCase`，命名空间和文件名
 使用 `snake_case`。布尔值以 `is`、`has`、`can` 等开头。完整规则见
-`docs/代码规范.md`；项目目前尚未配置自动格式化工具。
+`docs/设计/代码规范.md`；项目目前尚未配置自动格式化工具。
 
 项目自有代码的注释必须使用中文，并遵循 Google C++ Style Guide 的 Comments
 章节。公共接口和非显然的类型必须说明用途、输入、输出及约束；实现注释重点

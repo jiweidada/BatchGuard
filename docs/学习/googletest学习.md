@@ -1,5 +1,7 @@
 # GoogleTest 学习：BatchGuard 测试体系
 
+> 分类：学习。
+
 > 目标：理解 GoogleTest、CTest、CMake 和 CLion 如何协作，并为每个开发阶段
 > 留下一份可复查的测试文档。
 

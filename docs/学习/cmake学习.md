@@ -1,5 +1,7 @@
 # CMake 学习：读懂 BatchGuard 的构建配置
 
+> 分类：学习。
+
 本文不追求记住所有 CMake 命令，目标是让你能够读懂、修改并解释当前项目的
 `CMakeLists.txt`。
 

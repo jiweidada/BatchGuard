@@ -1,5 +1,7 @@
 # Git 学习：用 CLion 和命令行管理 BatchGuard
 
+> 分类：学习。
+
 本文的目标不是背完 Git，而是理解 CLion 的 Git 界面背后发生了什么，并能在
 没有 IDE 时独立完成检查、提交、同步、分支和安全撤销。
 
@@ -220,7 +222,7 @@ git add CMakeLists.txt
 
 ```powershell
 git add apps include src
-git add README.md docs/cmake学习.md
+git add README.md docs/学习/cmake学习.md
 ```
 
 暂存当前目录下所有未被忽略的变化：

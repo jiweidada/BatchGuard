@@ -1,8 +1,8 @@
 # BatchGuard
 
-BatchGuard 是一个使用 C++20 开发的本地重复文件检查工具。当前阶段支持命令行
-帮助、版本信息、单目录输入验证、递归普通文件发现、SHA-256 内容指纹、重复分组
-和完整中文扫描报告。
+BatchGuard 0.1.0 是一个使用 C++20 开发的 Windows 本地重复文件检查工具，支持
+单目录输入验证、递归普通文件发现、并发 SHA-256 内容指纹、重复分组、中文扫描
+报告和控制台动态进度。程序只读取输入目录，不删除、移动或修改文件。
 
 ## 项目结构
 
@@ -42,7 +42,8 @@ Debug：
 ```powershell
 cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/debug
-.\build\debug\BatchGuard.exe
+ctest --test-dir build/debug --output-on-failure
+.\build\debug\BatchGuard.exe --help
 ```
 
 Release：
@@ -50,7 +51,8 @@ Release：
 ```powershell
 cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/release
-.\build\release\BatchGuard.exe
+ctest --test-dir build/release --output-on-failure
+.\build\release\BatchGuard.exe --version
 ```
 
 ## 使用方式
@@ -92,6 +94,23 @@ Windows CNG `BCrypt` 和 64 KiB 固定缓冲区分块读取，不一次性加载
 文件发现完成前不知道最终总数，因此该阶段显示累计数量；元数据和 SHA-256 阶段
 显示真实比例。标准输出重定向到文件或管道时，动态进度自动关闭，只保留最终报告。
 
+## 设计摘要
+
+核心处理流程为：
+
+```text
+输入验证
+  → 递归发现普通文件
+  → 读取文件大小并筛选同大小候选
+  → 有界工作线程计算 SHA-256
+  → 按“大小 + SHA-256”建立重复组
+  → 输出稳定排序的扫描报告和退出码
+```
+
+`batchguard_core` 不依赖 CLI；预期文件系统失败写入报告并继续处理，非预期异常只在
+程序入口统一兜底。工作线程只执行文件读取和哈希，进度由扫描调用线程汇聚后串行
+通知展示层，避免并发写控制台。
+
 ## 运行测试
 
 通过 CTest 运行：
@@ -115,8 +134,10 @@ ctest --test-dir build/release --output-on-failure
 
 ## 文档
 
-- `docs/第一版MVP.md`：第一版产品行为和验收用例。
-- `docs/第一版实现.md`：模块、技术方案和实施顺序。
+- `CHANGELOG.md`：版本变更记录。
+- `docs/规划/`：项目目标、完整大纲和第一版 MVP。
+- `docs/设计/`：第一版实现、项目结构和代码规范。
+- `docs/交付/`：项目介绍、面试问答和最终交付清单。
 - `docs/测试/阶段1测试.md`：阶段 1 测试范围和实际结果。
 - `docs/测试/阶段2测试.md`：阶段 2 参数和目录输入验证。
 - `docs/测试/阶段3测试.md`：阶段 3 递归文件发现和路径处理。
@@ -125,6 +146,7 @@ ctest --test-dir build/release --output-on-failure
 - `docs/测试/阶段6测试.md`：阶段 6 MVP 覆盖矩阵和健壮性回归。
 - `docs/测试/阶段7测试.md`：阶段 7 扫描进度事件和控制台动态显示。
 - `docs/测试/阶段8测试.md`：阶段 8 有界文件级并发和线程安全进度汇聚。
-- `docs/cmake学习.md`、`docs/googletest学习.md`、`docs/git学习.md`：学习笔记。
+- `docs/测试/阶段9测试.md`：阶段 9 最终交付验收。
+- `docs/学习/`：CMake、GoogleTest 和 Git 学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。
