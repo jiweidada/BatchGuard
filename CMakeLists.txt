@@ -4,6 +4,7 @@ project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 
 add_library(batchguard_core STATIC
+    src/core/file_discovery.cpp
     src/core/input_validator.cpp
 )
 

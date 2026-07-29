@@ -1,0 +1,20 @@
+#pragma once
+
+#include "batchguard/core/file_failure.h"
+
+#include <filesystem>
+#include <vector>
+
+namespace batchguard {
+
+// 保存一次文件发现产生的普通文件路径和失败记录。
+struct FileDiscoveryResult {
+    std::vector<std::filesystem::path> filePaths;
+    std::vector<FileFailure> failures;
+};
+
+// 递归发现 `rootPath` 下的普通文件，并返回按路径稳定排序的结果。
+// 此函数不跟随符号链接，不读取文件内容，也不修改输入目录。
+[[nodiscard]] FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath);
+
+}

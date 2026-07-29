@@ -33,6 +33,7 @@ TEST(CliAppTest, HelpReturnsZero) {
 
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"BatchGuard <目录路径>"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"阶段 3 递归发现普通文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -63,6 +64,29 @@ TEST(CliAppTest, ExistingDirectoryReturnsZero) {
 
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"目录验证通过"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"发现普通文件：0"), std::wstring::npos);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, ExistingDirectoryReportsDiscoveredFileCount) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    const std::filesystem::path nestedDirectory = temporaryDirectory.path() / "nested";
+    ASSERT_TRUE(std::filesystem::create_directory(nestedDirectory));
+    std::ofstream firstFile{temporaryDirectory.path() / "first.txt"};
+    firstFile << "first";
+    firstFile.close();
+    std::ofstream secondFile{nestedDirectory / "second"};
+    secondFile << "second";
+    secondFile.close();
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({temporaryDirectory.path().wstring()}, output, error);
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_NE(output.str().find(L"发现普通文件：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"发现失败：0"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 

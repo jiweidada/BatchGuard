@@ -7,6 +7,10 @@ BatchGuard 是一个 C++20/CMake 项目：`apps/cli/main.cpp` 是程序入口，
 `batchguard_cli_support` 封装可测试的 CLI 应用层，`batchguard_tests` 承载
 GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
 
+开始新的开发会话或切换阶段前，必须先阅读 `docs/交接文档.md`，核对当前阶段、
+Git 状态、未提交文件和下一步边界。每个阶段实现、验证或提交状态发生变化后，
+同步更新该交接文档，避免依赖聊天记录传递上下文。
+
 项目扩展时遵循 `docs/项目结构.md`：公共核心头文件放入
 `include/batchguard/core/`，实现放入 `src/core/`，命令行代码放入
 `apps/cli/`，测试分别放入 `tests/unit/` 和 `tests/integration/`。核心模块

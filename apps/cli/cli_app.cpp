@@ -1,5 +1,6 @@
 #include "cli_app.h"
 
+#include "batchguard/core/file_discovery.h"
 #include "batchguard/core/input_validator.h"
 
 #include <filesystem>
@@ -20,7 +21,7 @@ void printUsage(std::wostream& output) {
            << L"  BatchGuard --help\n"
            << L"  BatchGuard --version\n"
            << L"\n"
-           << L"阶段 2 只验证输入目录，不执行目录扫描。\n";
+           << L"阶段 3 递归发现普通文件，不读取文件内容或判断重复文件。\n";
 }
 
 void printInputError(
@@ -87,9 +88,15 @@ int runCli(
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
-    // 阶段 2 在元数据验证后主动结束，不枚举已通过验证的目录内容。
+    const FileDiscoveryResult discoveryResult = discoverFiles(directoryPath);
     output << L"目录验证通过：" << directoryPath.wstring() << L'\n'
-           << L"阶段 2 仅验证输入，尚未执行目录扫描。\n";
+           << L"发现普通文件：" << discoveryResult.filePaths.size() << L'\n'
+           << L"发现失败：" << discoveryResult.failures.size() << L'\n'
+           << L"阶段 3 仅发现文件，尚未计算哈希或重复分组。\n";
+
+    if (!discoveryResult.failures.empty()) {
+        return static_cast<int>(ExitCode::PartialFailure);
+    }
     return static_cast<int>(ExitCode::Success);
 }
 

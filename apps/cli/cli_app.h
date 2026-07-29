@@ -10,6 +10,7 @@ namespace batchguard::cli {
 enum class ExitCode {
     Success = 0,
     InvalidInput = 1,
+    PartialFailure = 2,
     InternalError = 3
 };
 
