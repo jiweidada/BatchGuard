@@ -35,7 +35,7 @@ TEST(CliAppTest, HelpReturnsZero) {
 
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"BatchGuard <目录路径>"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"阶段 4 递归发现普通文件"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"递归扫描并报告重复文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -65,10 +65,12 @@ TEST(CliAppTest, ExistingDirectoryReturnsZero) {
         runCli({temporaryDirectory.path().wstring()}, output, error);
 
     EXPECT_EQ(exitCode, 0);
-    EXPECT_NE(output.str().find(L"目录验证通过"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"发现普通文件：0"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"读取文件大小：0"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"计算内容指纹：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"扫描目录："), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"发现文件：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"成功处理：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"处理失败：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"重复组数：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"未发现重复文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -89,14 +91,14 @@ TEST(CliAppTest, ExistingDirectoryReportsDiscoveredFileCount) {
         runCli({temporaryDirectory.path().wstring()}, output, error);
 
     EXPECT_EQ(exitCode, 0);
-    EXPECT_NE(output.str().find(L"发现普通文件：2"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"发现失败：0"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"读取文件大小：2"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"计算内容指纹：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"发现文件：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"成功处理：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"处理失败：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"重复组数：0"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
-TEST(CliAppTest, SameSizeFilesReportCalculatedFingerprintCount) {
+TEST(CliAppTest, SameSizeFilesWithDifferentContentsAreNotReportedAsDuplicates) {
     const test_support::TemporaryDirectory temporaryDirectory;
     std::ofstream firstFile{temporaryDirectory.path() / "first.bin"};
     firstFile << "first";
@@ -111,9 +113,38 @@ TEST(CliAppTest, SameSizeFilesReportCalculatedFingerprintCount) {
         runCli({temporaryDirectory.path().wstring()}, output, error);
 
     EXPECT_EQ(exitCode, 0);
-    EXPECT_NE(output.str().find(L"读取文件大小：2"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"计算内容指纹：2"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"内容处理失败：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"发现文件：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"成功处理：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"重复组数：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"未发现重复文件"), std::wstring::npos);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, DuplicateFilesAcrossDirectoriesAreReported) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    const std::filesystem::path nestedDirectory =
+        temporaryDirectory.path() / L"\u4e2d\u6587 \u5b50\u76ee\u5f55";
+    ASSERT_TRUE(std::filesystem::create_directory(nestedDirectory));
+    const std::filesystem::path firstFile = temporaryDirectory.path() / "first.bin";
+    const std::filesystem::path secondFile = nestedDirectory / L"\u5907\u4efd.bin";
+    std::ofstream firstOutput{firstFile, std::ios::binary};
+    firstOutput << "same contents";
+    firstOutput.close();
+    std::ofstream secondOutput{secondFile, std::ios::binary};
+    secondOutput << "same contents";
+    secondOutput.close();
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({temporaryDirectory.path().wstring()}, output, error);
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_NE(output.str().find(L"重复组数：1"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"[重复组 1]"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"SHA-256："), std::wstring::npos);
+    EXPECT_NE(output.str().find(firstFile.wstring()), std::wstring::npos);
+    EXPECT_NE(output.str().find(secondFile.wstring()), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -144,8 +175,11 @@ TEST(CliAppTest, HashingFailureReturnsTwoAndOtherFileContinues) {
     CloseHandle(lockedHandle);
 
     EXPECT_EQ(exitCode, 2);
-    EXPECT_NE(output.str().find(L"计算内容指纹：1"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"内容处理失败：1"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"成功处理：1"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"处理失败：1"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"[失败文件]"), std::wstring::npos);
+    EXPECT_NE(output.str().find(lockedFile.wstring()), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"阶段：读取内容"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 

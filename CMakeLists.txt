@@ -5,9 +5,11 @@ option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 
 add_library(batchguard_core STATIC
     src/core/content_fingerprint.cpp
+    src/core/duplicate_group.cpp
     src/core/file_discovery.cpp
     src/core/file_hasher.cpp
     src/core/input_validator.cpp
+    src/core/scanner.cpp
 )
 
 target_include_directories(batchguard_core

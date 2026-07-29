@@ -1,13 +1,16 @@
 #include "cli_app.h"
 
-#include "batchguard/core/content_fingerprint.h"
-#include "batchguard/core/file_discovery.h"
 #include "batchguard/core/input_validator.h"
+#include "batchguard/core/scanner.h"
 
-#include <algorithm>
+#include <Windows.h>
+
+#include <array>
 #include <filesystem>
 #include <ostream>
+#include <string>
 #include <string_view>
+#include <system_error>
 
 namespace batchguard::cli {
 namespace {
@@ -23,7 +26,7 @@ void printUsage(std::wostream& output) {
            << L"  BatchGuard --help\n"
            << L"  BatchGuard --version\n"
            << L"\n"
-           << L"阶段 4 递归发现普通文件，按大小筛选后计算 SHA-256 内容指纹。\n";
+           << L"递归扫描并报告重复文件，不修改任何输入文件。\n";
 }
 
 void printInputError(
@@ -45,6 +48,107 @@ void printInputError(
             break;
         case InputValidationError::None:
             break;
+    }
+}
+
+std::wstring_view describeFailureStage(FailureStage stage) {
+    switch (stage) {
+        case FailureStage::Discovery:
+            return L"发现文件";
+        case FailureStage::Metadata:
+            return L"读取元数据";
+        case FailureStage::Hashing:
+            return L"读取内容";
+    }
+    return L"未知阶段";
+}
+
+std::wstring formatSystemError(int errorValue) {
+    std::array<wchar_t, 512> messageBuffer{};
+    const DWORD messageLength = FormatMessageW(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        static_cast<DWORD>(errorValue),
+        0,
+        messageBuffer.data(),
+        static_cast<DWORD>(messageBuffer.size()),
+        nullptr);
+    if (messageLength == 0) {
+        return {};
+    }
+
+    std::wstring message(messageBuffer.data(), messageLength);
+    while (!message.empty() &&
+           (message.back() == L'\r' || message.back() == L'\n' ||
+            message.back() == L' ' || message.back() == L'\t')) {
+        message.pop_back();
+    }
+    return message;
+}
+
+std::wstring describeFailureReason(const std::error_code& errorCode) {
+    if (errorCode == std::errc::permission_denied) {
+        return L"权限不足。";
+    }
+    if (errorCode == std::errc::no_such_file_or_directory) {
+        return L"文件或目录已不存在。";
+    }
+    if (errorCode == std::errc::io_error) {
+        return L"文件输入输出失败。";
+    }
+
+    if (&errorCode.category() == &std::system_category()) {
+        const std::wstring systemMessage = formatSystemError(errorCode.value());
+        if (!systemMessage.empty()) {
+            return systemMessage;
+        }
+    }
+
+    const std::string_view categoryName = errorCode.category().name();
+    if (categoryName == "bcrypt") {
+        return L"CNG SHA-256 操作失败（状态码 " +
+            std::to_wstring(static_cast<unsigned int>(errorCode.value())) +
+            L"）。";
+    }
+    return L"底层操作失败（错误码 " + std::to_wstring(errorCode.value()) + L"）。";
+}
+
+void printScanReport(const ScanReport& report, std::wostream& output) {
+    output << L"扫描目录：" << report.rootPath.wstring() << L'\n'
+           << L"发现文件：" << report.discoveredFileCount << L'\n'
+           << L"成功处理：" << report.successfulFileCount << L'\n'
+           << L"处理失败：" << report.failures.size() << L'\n'
+           << L"重复组数：" << report.duplicateGroups.size() << L"\n\n";
+
+    if (report.duplicateGroups.empty()) {
+        output << L"未发现重复文件。\n";
+    } else {
+        for (std::size_t index = 0; index < report.duplicateGroups.size(); ++index) {
+            const DuplicateGroup& group = report.duplicateGroups[index];
+            const std::wstring sha256(group.sha256.begin(), group.sha256.end());
+            output << L"[重复组 " << index + 1U << L"]\n"
+                   << L"  文件大小：" << group.fileSize << L" 字节\n"
+                   << L"  SHA-256：" << sha256 << L'\n';
+            for (const std::filesystem::path& filePath : group.filePaths) {
+                output << L"  " << filePath.wstring() << L'\n';
+            }
+            if (index + 1U < report.duplicateGroups.size()) {
+                output << L'\n';
+            }
+        }
+    }
+
+    if (!report.failures.empty()) {
+        output << L"\n[失败文件]\n";
+        for (std::size_t index = 0; index < report.failures.size(); ++index) {
+            const FileFailure& failure = report.failures[index];
+            output << L"  路径：" << failure.path.wstring() << L'\n'
+                   << L"  阶段：" << describeFailureStage(failure.stage) << L'\n'
+                   << L"  原因：" << describeFailureReason(failure.errorCode) << L'\n';
+            if (index + 1U < report.failures.size()) {
+                output << L'\n';
+            }
+        }
     }
 }
 
@@ -90,25 +194,9 @@ int runCli(
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
-    const FileDiscoveryResult discoveryResult = discoverFiles(directoryPath);
-    const ContentFingerprintResult fingerprintResult =
-        fingerprintFileCandidates(discoveryResult.filePaths);
-    const std::size_t hashedFileCount = static_cast<std::size_t>(std::count_if(
-        fingerprintResult.fileRecords.begin(),
-        fingerprintResult.fileRecords.end(),
-        [](const FileRecord& record) {
-            return record.sha256.has_value();
-        }));
-
-    output << L"目录验证通过：" << directoryPath.wstring() << L'\n'
-           << L"发现普通文件：" << discoveryResult.filePaths.size() << L'\n'
-           << L"发现失败：" << discoveryResult.failures.size() << L'\n'
-           << L"读取文件大小：" << fingerprintResult.fileRecords.size() << L'\n'
-           << L"计算内容指纹：" << hashedFileCount << L'\n'
-           << L"内容处理失败：" << fingerprintResult.failures.size() << L'\n'
-           << L"阶段 4 已完成大小筛选和 SHA-256，尚未建立重复分组。\n";
-
-    if (!discoveryResult.failures.empty() || !fingerprintResult.failures.empty()) {
+    const ScanReport report = scanDirectory(directoryPath);
+    printScanReport(report, output);
+    if (!report.isComplete()) {
         return static_cast<int>(ExitCode::PartialFailure);
     }
     return static_cast<int>(ExitCode::Success);

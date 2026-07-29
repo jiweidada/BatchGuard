@@ -1,7 +1,9 @@
 add_executable(batchguard_tests
+    integration/scanner_test.cpp
     stage1/smoke_test.cpp
     unit/cli_app_test.cpp
     unit/content_fingerprint_test.cpp
+    unit/duplicate_group_test.cpp
     unit/file_discovery_test.cpp
     unit/input_validator_test.cpp
 )
