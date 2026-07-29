@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 4.2)
 project(BatchGuard LANGUAGES CXX)
 
+option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
+
 add_library(batchguard_core STATIC
     src/core/batchguard_core.cpp
 )
@@ -32,3 +34,17 @@ set_target_properties(batchguard_cli
     PROPERTIES
         OUTPUT_NAME BatchGuard
 )
+
+if(BATCHGUARD_BUILD_TESTS)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Third_Party/googletest/CMakeLists.txt")
+        message(FATAL_ERROR
+            "GoogleTest is missing. Expected Third_Party/googletest/CMakeLists.txt"
+        )
+    endif()
+
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    add_subdirectory(Third_Party/googletest EXCLUDE_FROM_ALL)
+
+    enable_testing()
+    add_subdirectory(tests)
+endif()
