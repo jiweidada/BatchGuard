@@ -1,8 +1,7 @@
 # BatchGuard
 
-BatchGuard 是一个使用 C++20 开发的本地重复文件检查工具。当前已完成阶段 1：
-核心静态库、命令行程序、GoogleTest/CTest 测试骨架以及 Debug/Release 构建。
-目录输入、文件扫描和重复判断将在后续阶段实现。
+BatchGuard 是一个使用 C++20 开发的本地重复文件检查工具。当前阶段支持命令行
+帮助、版本信息和单目录输入验证。目录扫描和重复判断将在后续阶段实现。
 
 ## 项目结构
 
@@ -30,8 +29,8 @@ GoogleTest 1.17.0 已保存在 `Third_Party/googletest/`，配置构建时不需
 
 1. 打开项目根目录。
 2. 执行 **Reload CMake Project**。
-3. 选择 `batchguard_cli` 运行程序。
-4. 打开 `tests/stage1/smoke_test.cpp`，点击测试左侧绿色按钮运行 GTest。
+3. 选择 `batchguard_cli`，在运行配置中填写目录参数后运行程序。
+4. 打开 `tests/` 下的测试文件，点击测试左侧绿色按钮运行 GTest。
 
 ## 命令行构建
 
@@ -53,11 +52,22 @@ cmake --build build/release
 .\build\release\BatchGuard.exe
 ```
 
-阶段 1 程序输出：
+## 使用方式
 
 ```text
-BatchGuard started.
+BatchGuard <目录路径>
+BatchGuard --help
+BatchGuard --version
 ```
+
+包含空格的路径需要使用双引号，例如：
+
+```powershell
+.\build\debug\BatchGuard.exe "E:\测试数据\待整理目录"
+```
+
+当前阶段只验证输入路径存在且为目录，不执行真正的目录扫描。参数缺失、目录
+不存在或输入为普通文件时返回退出码 `1`；帮助、版本和有效目录返回 `0`。
 
 ## 运行测试
 
@@ -85,6 +95,7 @@ ctest --test-dir build/release --output-on-failure
 - `docs/第一版MVP.md`：第一版产品行为和验收用例。
 - `docs/第一版实现.md`：模块、技术方案和实施顺序。
 - `docs/测试/阶段1测试.md`：阶段 1 测试范围和实际结果。
+- `docs/测试/阶段2测试.md`：阶段 2 参数和目录输入验证。
 - `docs/cmake学习.md`、`docs/googletest学习.md`、`docs/git学习.md`：学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。

@@ -4,7 +4,8 @@
 
 BatchGuard 是一个 C++20/CMake 项目：`apps/cli/main.cpp` 是程序入口，
 `batchguard_core` 是静态核心库，`batchguard_cli` 生成 `BatchGuard.exe`，
-`batchguard_tests` 承载 GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
+`batchguard_cli_support` 封装可测试的 CLI 应用层，`batchguard_tests` 承载
+GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
 
 项目扩展时遵循 `docs/项目结构.md`：公共核心头文件放入
 `include/batchguard/core/`，实现放入 `src/core/`，命令行代码放入
@@ -38,6 +39,12 @@ RAII、值语义、`enum class`、显式单参数构造函数，并用 `std::err
 成员使用 `lowerCamelCase_`，常量使用 `kPascalCase`，命名空间和文件名
 使用 `snake_case`。布尔值以 `is`、`has`、`can` 等开头。完整规则见
 `docs/代码规范.md`；项目目前尚未配置自动格式化工具。
+
+项目自有代码的注释必须使用中文，并遵循 Google C++ Style Guide 的 Comments
+章节。公共接口和非显然的类型必须说明用途、输入、输出及约束；实现注释重点
+解释关键步骤和设计原因，不得逐行复述代码。统一优先使用 `//`，注释采用语法
+完整、标点正确的中文句子，并与代码同步更新。`TODO` 必须带 Issue、负责人或
+其他可追踪标识。第三方源码保持上游原貌，不翻译或修改其注释。
 
 ## 测试规范
 

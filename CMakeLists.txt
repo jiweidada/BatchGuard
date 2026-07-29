@@ -1,15 +1,35 @@
 cmake_minimum_required(VERSION 4.2)
-project(BatchGuard LANGUAGES CXX)
+project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
 
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 
 add_library(batchguard_core STATIC
-    src/core/batchguard_core.cpp
+    src/core/input_validator.cpp
 )
 
 target_include_directories(batchguard_core
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+add_library(batchguard_cli_support STATIC
+    apps/cli/cli_app.cpp
+    apps/cli/console_encoding.cpp
+)
+
+target_include_directories(batchguard_cli_support
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/cli"
+)
+
+target_link_libraries(batchguard_cli_support
+    PRIVATE
+        batchguard_core
+)
+
+target_compile_definitions(batchguard_cli_support
+    PRIVATE
+        BATCHGUARD_VERSION="${PROJECT_VERSION}"
 )
 
 add_executable(batchguard_cli
@@ -18,11 +38,12 @@ add_executable(batchguard_cli
 
 target_link_libraries(batchguard_cli
     PRIVATE
-        batchguard_core
+        batchguard_cli_support
 )
 
 set_target_properties(
     batchguard_core
+    batchguard_cli_support
     batchguard_cli
     PROPERTIES
         CXX_STANDARD 20
@@ -34,6 +55,12 @@ set_target_properties(batchguard_cli
     PROPERTIES
         OUTPUT_NAME BatchGuard
 )
+
+if(MSVC)
+    target_compile_options(batchguard_core PRIVATE /utf-8)
+    target_compile_options(batchguard_cli_support PRIVATE /utf-8)
+    target_compile_options(batchguard_cli PRIVATE /utf-8)
+endif()
 
 if(BATCHGUARD_BUILD_TESTS)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Third_Party/googletest/CMakeLists.txt")
