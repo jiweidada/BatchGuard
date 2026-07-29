@@ -2,22 +2,28 @@
 
 ## 项目结构与模块组织
 
-BatchGuard 目前是一个最小化的 C++20/CMake 项目：`main.cpp` 是程序入口，
-`CMakeLists.txt` 定义 `BatchGuard` 可执行目标，`docs/` 保存项目目标、MVP、
-结构和代码规范。`cmake-build-debug/` 属于生成目录，不应提交。
+BatchGuard 是一个 C++20/CMake 项目：`apps/cli/main.cpp` 是程序入口，
+`batchguard_core` 是静态核心库，`batchguard_cli` 生成 `BatchGuard.exe`，
+`batchguard_tests` 承载 GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
 
 项目扩展时遵循 `docs/项目结构.md`：公共核心头文件放入
 `include/batchguard/core/`，实现放入 `src/core/`，命令行代码放入
 `apps/cli/`，测试分别放入 `tests/unit/` 和 `tests/integration/`。核心模块
 不得依赖 CLI 或未来的 GUI，也不要在 `main.cpp` 中堆积业务逻辑。
 
+第三方源码统一放入 `Third_Party/<library>/`，由 CMake 从本地目录接入，避免
+不同构建目录重复下载。保留上游许可证和版本记录，不直接修改第三方源码；依赖
+升级必须使用独立提交。
+
 ## 构建、测试与本地开发
 
-- `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug`：配置源码外 Debug 构建。
-- `cmake --build build`：编译当前配置。
-- `.\build\BatchGuard.exe`：在 Windows 上运行 Ninja 构建产物。
-- `cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release`：配置 Release 构建。
-- `ctest --test-dir build --output-on-failure`：运行 CTest；当前尚未配置测试目标。
+- `cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug`：配置 Debug。
+- `cmake --build build/debug`：构建 Debug 程序和测试。
+- `.\build\debug\BatchGuard.exe`：运行 Debug CLI。
+- `ctest --test-dir build/debug --output-on-failure`：运行 Debug 测试。
+- `cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release`：配置 Release。
+- `cmake --build build/release`：构建 Release 程序和测试。
+- `ctest --test-dir build/release --output-on-failure`：运行 Release 测试。
 
 不要提交构建产物或个人 IDE 设置。
 
@@ -42,9 +48,9 @@ RAII、值语义、`enum class`、显式单参数构造函数，并用 `std::err
 
 ## 提交与合并请求
 
-当前 `.git` 中没有可用历史，无法归纳既有提交规范。提交标题应简短并使用
-祈使语气，例如 `Add directory scanner`。每次改动尽量限制在 1～3 个文件；
-未经讨论不要新增第三方依赖。
+提交信息采用 `<类型>: <简短说明>`，现有类型包括 `feat`、`docs`、`build` 和
+`chore`，例如 `feat: 添加目录输入验证`。每个提交只表达一个目的；未经讨论
+不要新增第三方依赖。
 
 合并请求需说明目标、影响文件、设计理由及验证命令和结果，并关联相关
 Issue。只有涉及可见界面变化时才需要截图。

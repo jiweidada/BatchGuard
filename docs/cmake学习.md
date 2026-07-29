@@ -53,6 +53,30 @@ batchguard_cli
 batchguard_core
 ```
 
+从源文件到构建产物的过程是：
+
+```text
+batchguard_core.cpp
+          │ 编译
+          ▼
+batchguard_core.cpp.obj
+          │ 生成静态库
+          ▼
+batchguard_core.lib
+
+main.cpp
+    │ 编译
+    ▼
+main.cpp.obj
+    │
+    │ 与 batchguard_core.lib 一起链接
+    ▼
+BatchGuard.exe
+```
+
+因此，核心库和 CLI 不是两个互不相关的产物。`batchguard_core.lib` 会在链接阶段
+参与生成 `BatchGuard.exe`。
+
 - `batchguard_core` 是静态库，未来承载文件扫描、哈希和重复分组等核心逻辑。
 - `batchguard_cli` 是命令行程序，只负责程序入口和终端交互。
 - CLI 可以依赖核心库，核心库不能反向依赖 CLI。
@@ -236,8 +260,27 @@ cmake --build build/release
 阅读配置并回答：
 
 1. 修改 `apps/cli/main.cpp` 后，哪个目标需要重新编译？
+- [1/2] Building CXX object CMakeFiles\batchguard_cli.dir\apps\cli\main.cpp.obj
+- [2/2] Linking CXX executable BatchGuard.exe
+- 只有他自己
+
+<p style="color: red;">
+<strong>标准参考：</strong>重新编译 main.cpp，并重新链接 batchguard_cli；batchguard_core 没有变化，不会重新构建。
+</p>
+
 2. 修改核心库源文件后，为什么 CLI 需要重新链接？
+- CLI 依赖于 Core ，core 修改之后需要重新编译，那CLI就需要重新链接
+
+<p style="color: red;">
+<strong>标准参考：</strong>核心源文件重新编译后会生成新的 batchguard_core.lib。CLI 链接了该静态库，因此必须重新链接 BatchGuard.exe，才能包含最新的核心库代码；main.cpp 本身不一定重新编译。
+</p>
+
 3. 删除 `target_link_libraries` 后，CLI 是否还能继承核心库的公共头文件路径？
+- 应该不行吧，batchguard_core 可以访问头文件，CLI 通过 core 访问核心库头文件，不链接，CLI 怎么访问公共头文件
+
+<p style="color: red;">
+<strong>标准参考：</strong>不能。target_link_libraries 建立了 CLI 对核心库的依赖，核心库通过 PUBLIC 公开的 include 路径才会传播给 CLI。删除依赖后，除非单独给 CLI 配置头文件路径，否则当前 main.cpp 会找不到核心头文件。
+</p>
 
 ### 练习二：观察增量构建
 
@@ -245,11 +288,23 @@ cmake --build build/release
 2. 将启动文字改为 `BatchGuard stage 1.`。
 3. 再次执行 `cmake --build`。
 4. 观察构建工具只处理发生变化的目标，而不是全部重建。
+- 按照依赖顺序只有main 会重新构建
+
+<p style="color: red;">
+<strong>标准参考：</strong>修改 main.cpp 后，Ninja 只重新编译 main.cpp，再重新链接 batchguard_cli；核心库不变，因此不会重新编译或重新生成。这里要区分“编译源文件”和“链接目标”。
+</p>
 
 ### 练习三：添加一个源文件
 
 新建 `src/core/example.cpp`，将它加入 `batchguard_core` 的源文件列表，重新配置并
 构建。练习结束后删除该文件，并同步删除 CMake 中对应的一行。
+- [1/3] Building CXX object CMakeFiles\batchguard_core.dir\src\core\example.cpp.obj
+- [2/3] Linking CXX static library batchguard_core.lib
+- [3/3] Linking CXX executable BatchGuard.exe
+
+<p style="color: red;">
+<strong>标准参考：</strong>结果正确。example.cpp 被编译后，batchguard_core.lib 需要重新生成；因为 CLI 链接该静态库，BatchGuard.exe 也需要重新链接。未变化的现有源文件不会重复编译。
+</p>
 
 ## 8. 常见问题
 
@@ -272,8 +327,42 @@ cmake --build build/release
 你能够不查资料说明以下问题，就算掌握了当前阶段所需的 CMake：
 
 - CMake 与编译器、Ninja 的职责分别是什么。
+- cmake 是阅读 cmakelist.txt  为Ninja 配置构建规则 ，编译器按照规则构建
+
+<p style="color: red;">
+<strong>标准参考：</strong>CMake 读取 CMakeLists.txt 并生成 Ninja 构建规则；Ninja 判断哪些步骤需要执行并调用工具；编译器把 .cpp 编译成 .obj，链接器再把目标文件和库组合成 .lib 或 .exe。
+</p>
+
 - `add_library`、`add_executable`、`target_link_libraries` 分别做什么。
+- add_library 应该是生成 .lib
+- add_executable 生成 .exe
+- target_link_libraries 连接 batchguard_cli batchguard_core
+
+<p style="color: red;">
+<strong>标准参考：</strong>add_library 定义库目标及其源文件，构建时生成 .lib；add_executable 定义可执行目标及其源文件，构建时生成 .exe；target_link_libraries 声明目标之间的链接和依赖关系。
+</p>
+
 - `PUBLIC` 和 `PRIVATE` 如何影响依赖传播。
+
+<p style="color: red;">
+<strong>标准参考：</strong>PRIVATE 只供当前目标使用，不传递给依赖者；PUBLIC 既供当前目标使用，也传递给依赖者；INTERFACE 只传递给依赖者，当前目标自身不使用。
+</p>
+
 - 为什么公共头文件在 `include/batchguard/` 下。
+
+<p style="color: red;">
+<strong>标准参考：</strong>include 是公共头文件根目录，batchguard 是项目专属前缀，可以避免与其他库的同名头文件冲突，并形成稳定的包含路径，例如 &lt;batchguard/core/batchguard_core.h&gt;。
+</p>
+
 - 如何新增 `.cpp`，并让它进入正确目标。
+再规定cpp路径 新增文件后，再去cmakelist.txt里 add_executable 添加cpp 路径
+
+<p style="color: red;">
+<strong>标准参考：</strong>先判断源文件属于哪个目标。核心实现加入 add_library(batchguard_core ...)；CLI 实现加入 add_executable(batchguard_cli ...)。重新配置后，CMake 才会把新文件纳入对应目标。
+</p>
+
 - 如何独立配置、构建和运行 Debug/Release。
+
+<p style="color: red;">
+<strong>标准参考：</strong>Debug 和 Release 应使用不同构建目录。先用 cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug 配置，再用 cmake --build build/debug 构建；Release 将目录和构建类型分别改为 build/release 与 Release，最后运行各自目录中的 BatchGuard.exe。
+</p>
