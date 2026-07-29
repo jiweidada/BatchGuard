@@ -6,7 +6,7 @@
 
 namespace batchguard::cli {
 
-// 定义目录扫描功能引入前所使用的进程退出码。
+// 定义 CLI 流程使用的进程退出码。
 enum class ExitCode {
     Success = 0,
     InvalidInput = 1,

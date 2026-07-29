@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <Windows.h>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -33,7 +35,7 @@ TEST(CliAppTest, HelpReturnsZero) {
 
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"BatchGuard <目录路径>"), std::wstring::npos);
-    EXPECT_NE(output.str().find(L"阶段 3 递归发现普通文件"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"阶段 4 递归发现普通文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -65,6 +67,8 @@ TEST(CliAppTest, ExistingDirectoryReturnsZero) {
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"目录验证通过"), std::wstring::npos);
     EXPECT_NE(output.str().find(L"发现普通文件：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"读取文件大小：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"计算内容指纹：0"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -87,6 +91,61 @@ TEST(CliAppTest, ExistingDirectoryReportsDiscoveredFileCount) {
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"发现普通文件：2"), std::wstring::npos);
     EXPECT_NE(output.str().find(L"发现失败：0"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"读取文件大小：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"计算内容指纹：0"), std::wstring::npos);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, SameSizeFilesReportCalculatedFingerprintCount) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    std::ofstream firstFile{temporaryDirectory.path() / "first.bin"};
+    firstFile << "first";
+    firstFile.close();
+    std::ofstream secondFile{temporaryDirectory.path() / "second.bin"};
+    secondFile << "other";
+    secondFile.close();
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({temporaryDirectory.path().wstring()}, output, error);
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_NE(output.str().find(L"读取文件大小：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"计算内容指纹：2"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"内容处理失败：0"), std::wstring::npos);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, HashingFailureReturnsTwoAndOtherFileContinues) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    const std::filesystem::path lockedFile = temporaryDirectory.path() / "locked.bin";
+    const std::filesystem::path readableFile = temporaryDirectory.path() / "readable.bin";
+    std::ofstream lockedOutput{lockedFile};
+    lockedOutput << "locked";
+    lockedOutput.close();
+    std::ofstream readableOutput{readableFile};
+    readableOutput << "public";
+    readableOutput.close();
+    const HANDLE lockedHandle = CreateFileW(
+        lockedFile.c_str(),
+        GENERIC_READ,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    ASSERT_NE(lockedHandle, INVALID_HANDLE_VALUE);
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({temporaryDirectory.path().wstring()}, output, error);
+    CloseHandle(lockedHandle);
+
+    EXPECT_EQ(exitCode, 2);
+    EXPECT_NE(output.str().find(L"计算内容指纹：1"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"内容处理失败：1"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
 

@@ -1,8 +1,10 @@
 #include "cli_app.h"
 
+#include "batchguard/core/content_fingerprint.h"
 #include "batchguard/core/file_discovery.h"
 #include "batchguard/core/input_validator.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <ostream>
 #include <string_view>
@@ -21,7 +23,7 @@ void printUsage(std::wostream& output) {
            << L"  BatchGuard --help\n"
            << L"  BatchGuard --version\n"
            << L"\n"
-           << L"阶段 3 递归发现普通文件，不读取文件内容或判断重复文件。\n";
+           << L"阶段 4 递归发现普通文件，按大小筛选后计算 SHA-256 内容指纹。\n";
 }
 
 void printInputError(
@@ -89,12 +91,24 @@ int runCli(
     }
 
     const FileDiscoveryResult discoveryResult = discoverFiles(directoryPath);
+    const ContentFingerprintResult fingerprintResult =
+        fingerprintFileCandidates(discoveryResult.filePaths);
+    const std::size_t hashedFileCount = static_cast<std::size_t>(std::count_if(
+        fingerprintResult.fileRecords.begin(),
+        fingerprintResult.fileRecords.end(),
+        [](const FileRecord& record) {
+            return record.sha256.has_value();
+        }));
+
     output << L"目录验证通过：" << directoryPath.wstring() << L'\n'
            << L"发现普通文件：" << discoveryResult.filePaths.size() << L'\n'
            << L"发现失败：" << discoveryResult.failures.size() << L'\n'
-           << L"阶段 3 仅发现文件，尚未计算哈希或重复分组。\n";
+           << L"读取文件大小：" << fingerprintResult.fileRecords.size() << L'\n'
+           << L"计算内容指纹：" << hashedFileCount << L'\n'
+           << L"内容处理失败：" << fingerprintResult.failures.size() << L'\n'
+           << L"阶段 4 已完成大小筛选和 SHA-256，尚未建立重复分组。\n";
 
-    if (!discoveryResult.failures.empty()) {
+    if (!discoveryResult.failures.empty() || !fingerprintResult.failures.empty()) {
         return static_cast<int>(ExitCode::PartialFailure);
     }
     return static_cast<int>(ExitCode::Success);

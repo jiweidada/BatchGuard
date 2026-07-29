@@ -4,13 +4,20 @@ project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 
 add_library(batchguard_core STATIC
+    src/core/content_fingerprint.cpp
     src/core/file_discovery.cpp
+    src/core/file_hasher.cpp
     src/core/input_validator.cpp
 )
 
 target_include_directories(batchguard_core
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+target_link_libraries(batchguard_core
+    PRIVATE
+        bcrypt
 )
 
 add_library(batchguard_cli_support STATIC
