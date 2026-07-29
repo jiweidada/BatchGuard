@@ -132,6 +132,12 @@ std::string toLowerHex(const std::vector<unsigned char>& digest) {
 }
 
 FileHashResult calculateFileSha256(const std::filesystem::path& filePath) {
+    return calculateFileSha256(filePath, {});
+}
+
+FileHashResult calculateFileSha256(
+    const std::filesystem::path& filePath,
+    const FileHashProgressCallback& progressCallback) {
     const HANDLE rawFileHandle = CreateFileW(
         filePath.c_str(),
         GENERIC_READ,
@@ -197,6 +203,7 @@ FileHashResult calculateFileSha256(const std::filesystem::path& filePath) {
     }
 
     std::array<unsigned char, kReadBufferSize> buffer{};
+    std::uintmax_t completedBytes = 0;
     while (true) {
         DWORD bytesRead = 0;
         if (!ReadFile(
@@ -220,6 +227,10 @@ FileHashResult calculateFileSha256(const std::filesystem::path& filePath) {
             0);
         if (!BCRYPT_SUCCESS(status)) {
             return {{}, makeBCryptError(status)};
+        }
+        completedBytes += bytesRead;
+        if (progressCallback) {
+            progressCallback(completedBytes);
         }
     }
 

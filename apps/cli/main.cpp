@@ -1,5 +1,8 @@
 #include "cli_app.h"
 #include "console_encoding.h"
+#include "console_progress.h"
+
+#include "batchguard/core/scan_progress.h"
 
 #include <exception>
 #include <iostream>
@@ -20,7 +23,19 @@ int wmain(int argumentCount, wchar_t* argumentValues[]) {
 
         std::wostringstream output;
         std::wostringstream error;
-        const int exitCode = batchguard::cli::runCli(arguments, output, error);
+        batchguard::cli::ConsoleProgressRenderer progressRenderer{
+            std::cout,
+            batchguard::cli::isStandardOutputConsole()};
+        batchguard::ScanProgressCallback progressCallback;
+        if (progressRenderer.isEnabled()) {
+            progressCallback =
+                [&progressRenderer](const batchguard::ScanProgress& progress) {
+                    progressRenderer.render(progress);
+                };
+        }
+        const int exitCode =
+            batchguard::cli::runCli(arguments, output, error, progressCallback);
+        progressRenderer.finish();
 
         // 在最终输出边界统一转换，使控制台和重定向流收到相同的 UTF-8 内容。
         batchguard::cli::writeUtf8(std::cout, output.str());

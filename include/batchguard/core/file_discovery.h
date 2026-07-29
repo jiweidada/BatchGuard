@@ -1,6 +1,7 @@
 #pragma once
 
 #include "batchguard/core/file_failure.h"
+#include "batchguard/core/scan_progress.h"
 
 #include <filesystem>
 #include <vector>
@@ -15,6 +16,12 @@ struct FileDiscoveryResult {
 
 // 递归发现 `rootPath` 下的普通文件，并返回按路径稳定排序的结果。
 // 此函数不跟随符号链接，不读取文件内容，也不修改输入目录。
-[[nodiscard]] FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath);
+[[nodiscard]] FileDiscoveryResult discoverFiles(
+    const std::filesystem::path& rootPath);
+
+// 递归发现普通文件，并同步报告累计发现数量。
+[[nodiscard]] FileDiscoveryResult discoverFiles(
+    const std::filesystem::path& rootPath,
+    const ScanProgressCallback& progressCallback);
 
 }

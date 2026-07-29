@@ -33,9 +33,26 @@ bool isFailureBefore(const FileFailure& left, const FileFailure& right) {
 }
 
 ScanReport scanDirectory(const std::filesystem::path& rootPath) {
-    FileDiscoveryResult discoveryResult = discoverFiles(rootPath);
+    return scanDirectory(rootPath, ScanOptions{}, {});
+}
+
+ScanReport scanDirectory(
+    const std::filesystem::path& rootPath,
+    const ScanProgressCallback& progressCallback) {
+    return scanDirectory(rootPath, ScanOptions{}, progressCallback);
+}
+
+ScanReport scanDirectory(
+    const std::filesystem::path& rootPath,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback) {
+    FileDiscoveryResult discoveryResult =
+        discoverFiles(rootPath, progressCallback);
     ContentFingerprintResult fingerprintResult =
-        fingerprintFileCandidates(discoveryResult.filePaths);
+        fingerprintFileCandidates(
+            discoveryResult.filePaths,
+            scanOptions,
+            progressCallback);
 
     const std::size_t hashingFailureCount = static_cast<std::size_t>(std::count_if(
         fingerprintResult.failures.begin(),
@@ -49,6 +66,15 @@ ScanReport scanDirectory(const std::filesystem::path& rootPath) {
     report.discoveredFileCount = discoveryResult.filePaths.size();
     report.successfulFileCount =
         fingerprintResult.fileRecords.size() - hashingFailureCount;
+    if (progressCallback) {
+        progressCallback({
+            ScanProgressStage::Grouping,
+            0U,
+            1U,
+            0U,
+            0U,
+            false});
+    }
     report.duplicateGroups = findDuplicateGroups(fingerprintResult.fileRecords);
     report.failures = std::move(discoveryResult.failures);
     report.failures.insert(
@@ -56,6 +82,15 @@ ScanReport scanDirectory(const std::filesystem::path& rootPath) {
         std::make_move_iterator(fingerprintResult.failures.begin()),
         std::make_move_iterator(fingerprintResult.failures.end()));
     std::sort(report.failures.begin(), report.failures.end(), isFailureBefore);
+    if (progressCallback) {
+        progressCallback({
+            ScanProgressStage::Grouping,
+            1U,
+            1U,
+            0U,
+            0U,
+            true});
+    }
     return report;
 }
 

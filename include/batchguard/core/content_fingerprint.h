@@ -1,6 +1,8 @@
 #pragma once
 
 #include "batchguard/core/file_failure.h"
+#include "batchguard/core/scan_options.h"
+#include "batchguard/core/scan_progress.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -28,5 +30,16 @@ struct ContentFingerprintResult {
 // 单个路径失败不会终止其他文件；返回的记录和失败项均按路径稳定排序。
 [[nodiscard]] ContentFingerprintResult fingerprintFileCandidates(
     const std::vector<std::filesystem::path>& filePaths);
+
+// 执行大小筛选和候选哈希，并同步报告元数据及哈希阶段进度。
+[[nodiscard]] ContentFingerprintResult fingerprintFileCandidates(
+    const std::vector<std::filesystem::path>& filePaths,
+    const ScanProgressCallback& progressCallback);
+
+// 按扫描配置执行大小筛选和候选哈希，并在调用线程内同步报告进度。
+[[nodiscard]] ContentFingerprintResult fingerprintFileCandidates(
+    const std::vector<std::filesystem::path>& filePaths,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback);
 
 }

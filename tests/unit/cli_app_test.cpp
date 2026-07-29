@@ -1,6 +1,8 @@
 #include "cli_app.h"
 #include "console_encoding.h"
 
+#include "batchguard/core/scan_progress.h"
+
 #include "test_support/temporary_directory.h"
 
 #include <gtest/gtest.h>
@@ -35,6 +37,7 @@ TEST(CliAppTest, HelpReturnsZero) {
 
     EXPECT_EQ(exitCode, 0);
     EXPECT_NE(output.str().find(L"BatchGuard <目录路径>"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"--hash-workers <1-64>"), std::wstring::npos);
     EXPECT_NE(output.str().find(L"递归扫描并报告重复文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
 }
@@ -216,6 +219,34 @@ TEST(CliAppTest, RepeatedRunsProduceStableReport) {
     EXPECT_TRUE(secondRunError.str().empty());
 }
 
+TEST(CliAppTest, ForwardsCoreProgressEvents) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    std::ofstream firstFile{temporaryDirectory.path() / "first.bin"};
+    firstFile << "same";
+    firstFile.close();
+    std::ofstream secondFile{temporaryDirectory.path() / "second.bin"};
+    secondFile << "same";
+    secondFile.close();
+    std::wostringstream output;
+    std::wostringstream error;
+    std::vector<ScanProgress> events;
+
+    const int exitCode = runCli(
+        {temporaryDirectory.path().wstring()},
+        output,
+        error,
+        [&events](const ScanProgress& progress) {
+            events.push_back(progress);
+        });
+
+    EXPECT_EQ(exitCode, 0);
+    ASSERT_FALSE(events.empty());
+    EXPECT_EQ(events.front().stage, ScanProgressStage::Discovery);
+    EXPECT_EQ(events.back().stage, ScanProgressStage::Grouping);
+    EXPECT_TRUE(events.back().isStageComplete);
+    EXPECT_TRUE(error.str().empty());
+}
+
 TEST(CliAppTest, DirectoryWithUnicodeAndSpacesReturnsZero) {
     const test_support::TemporaryDirectory temporaryDirectory;
 
@@ -272,6 +303,107 @@ TEST(CliAppTest, UnsupportedOptionReturnsOne) {
     EXPECT_EQ(exitCode, 1);
     EXPECT_TRUE(output.str().empty());
     EXPECT_NE(error.str().find(L"不支持的选项"), std::wstring::npos);
+}
+
+TEST(CliAppTest, HashWorkerOptionAcceptsAValidValue) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode = runCli(
+        {
+            L"--hash-workers",
+            L"4",
+            temporaryDirectory.path().wstring()},
+        output,
+        error);
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_NE(output.str().find(L"扫描目录："), std::wstring::npos);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, HashWorkerOptionCanFollowTheDirectory) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode = runCli(
+        {
+            temporaryDirectory.path().wstring(),
+            L"--hash-workers",
+            L"2"},
+        output,
+        error);
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, HashWorkerOptionRejectsOutOfRangeValue) {
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({L"--hash-workers", L"65", L"directory"}, output, error);
+
+    EXPECT_EQ(exitCode, 1);
+    EXPECT_TRUE(output.str().empty());
+    EXPECT_NE(error.str().find(L"1 至 64"), std::wstring::npos);
+}
+
+TEST(CliAppTest, HashWorkerOptionRejectsZero) {
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({L"--hash-workers", L"0", L"directory"}, output, error);
+
+    EXPECT_EQ(exitCode, 1);
+    EXPECT_TRUE(output.str().empty());
+    EXPECT_NE(error.str().find(L"1 至 64"), std::wstring::npos);
+}
+
+TEST(CliAppTest, HashWorkerOptionRejectsNonNumericValue) {
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode =
+        runCli({L"--hash-workers", L"four", L"directory"}, output, error);
+
+    EXPECT_EQ(exitCode, 1);
+    EXPECT_TRUE(output.str().empty());
+    EXPECT_NE(error.str().find(L"1 至 64"), std::wstring::npos);
+}
+
+TEST(CliAppTest, HashWorkerOptionRequiresAValue) {
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode = runCli({L"--hash-workers"}, output, error);
+
+    EXPECT_EQ(exitCode, 1);
+    EXPECT_TRUE(output.str().empty());
+    EXPECT_NE(error.str().find(L"缺少线程数"), std::wstring::npos);
+}
+
+TEST(CliAppTest, HashWorkerOptionCanOnlyBeSpecifiedOnce) {
+    std::wostringstream output;
+    std::wostringstream error;
+
+    const int exitCode = runCli(
+        {
+            L"--hash-workers",
+            L"2",
+            L"--hash-workers",
+            L"4",
+            L"directory"},
+        output,
+        error);
+
+    EXPECT_EQ(exitCode, 1);
+    EXPECT_TRUE(output.str().empty());
+    EXPECT_NE(error.str().find(L"只能指定一次"), std::wstring::npos);
 }
 
 TEST(CliAppTest, MultipleArgumentsReturnOne) {

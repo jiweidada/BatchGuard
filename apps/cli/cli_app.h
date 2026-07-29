@@ -1,5 +1,7 @@
 #pragma once
 
+#include "batchguard/core/scan_progress.h"
+
 #include <iosfwd>
 #include <string>
 #include <vector>
@@ -19,6 +21,7 @@ enum class ExitCode {
 [[nodiscard]] int runCli(
     const std::vector<std::wstring>& arguments,
     std::wostream& output,
-    std::wostream& error);
+    std::wostream& error,
+    const ScanProgressCallback& progressCallback = {});
 
 }

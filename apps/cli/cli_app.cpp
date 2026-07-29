@@ -6,7 +6,9 @@
 #include <Windows.h>
 
 #include <array>
+#include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -16,17 +18,44 @@ namespace batchguard::cli {
 namespace {
 
 constexpr std::wstring_view kHelpOption = L"--help";
+constexpr std::wstring_view kHashWorkersOption = L"--hash-workers";
 constexpr std::wstring_view kVersionOption = L"--version";
+constexpr std::size_t kMaximumHashWorkerCount = 64U;
 
 void printUsage(std::wostream& output) {
     output << L"BatchGuard - 本地重复文件检查工具\n"
            << L"\n"
            << L"用法：\n"
            << L"  BatchGuard <目录路径>\n"
+           << L"  BatchGuard --hash-workers <1-64> <目录路径>\n"
            << L"  BatchGuard --help\n"
            << L"  BatchGuard --version\n"
            << L"\n"
-           << L"递归扫描并报告重复文件，不修改任何输入文件。\n";
+           << L"递归扫描并报告重复文件，不修改任何输入文件。\n"
+           << L"未指定哈希线程数时自动使用最多 4 个工作线程。\n"
+           << L"交互式控制台会显示发现、元数据、哈希和报告生成进度。\n";
+}
+
+std::optional<std::size_t> parseHashWorkerCount(std::wstring_view text) {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+
+    std::size_t value = 0U;
+    for (const wchar_t character : text) {
+        if (character < L'0' || character > L'9') {
+            return std::nullopt;
+        }
+        const std::size_t digit = static_cast<std::size_t>(character - L'0');
+        if (value > (kMaximumHashWorkerCount - digit) / 10U) {
+            return std::nullopt;
+        }
+        value = value * 10U + digit;
+    }
+    if (value == 0U || value > kMaximumHashWorkerCount) {
+        return std::nullopt;
+    }
+    return value;
 }
 
 void printInputError(
@@ -157,44 +186,81 @@ void printScanReport(const ScanReport& report, std::wostream& output) {
 int runCli(
     const std::vector<std::wstring>& arguments,
     std::wostream& output,
-    std::wostream& error) {
+    std::wostream& error,
+    const ScanProgressCallback& progressCallback) {
     if (arguments.empty()) {
         error << L"错误：缺少目录参数。\n"
               << L"使用 BatchGuard --help 查看用法。\n";
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
-    if (arguments.size() > 1U) {
-        error << L"错误：只允许提供一个目录路径。\n"
-              << L"使用 BatchGuard --help 查看用法。\n";
-        return static_cast<int>(ExitCode::InvalidInput);
-    }
-
-    const std::wstring_view argument = arguments.front();
-
-    // CLI 只接受一个选项或一个目录位置参数，因此帮助和版本必须独立使用。
-    if (argument == kHelpOption) {
+    // 帮助和版本信息必须独立使用，避免忽略同一命令中的其他参数。
+    if (arguments.size() == 1U && arguments.front() == kHelpOption) {
         printUsage(output);
         return static_cast<int>(ExitCode::Success);
     }
-    if (argument == kVersionOption) {
+    if (arguments.size() == 1U && arguments.front() == kVersionOption) {
         output << L"BatchGuard " << BATCHGUARD_VERSION << L'\n';
         return static_cast<int>(ExitCode::Success);
     }
-    if (argument.starts_with(L"--")) {
-        error << L"错误：不支持的选项：" << argument << L'\n'
+
+    ScanOptions scanOptions;
+    std::optional<std::filesystem::path> directoryPath;
+    bool hasHashWorkerOption = false;
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        const std::wstring_view argument = arguments[index];
+        if (argument == kHashWorkersOption) {
+            if (hasHashWorkerOption) {
+                error << L"错误：--hash-workers 只能指定一次。\n"
+                      << L"使用 BatchGuard --help 查看用法。\n";
+                return static_cast<int>(ExitCode::InvalidInput);
+            }
+            if (index + 1U >= arguments.size()) {
+                error << L"错误：--hash-workers 后缺少线程数。\n"
+                      << L"使用 BatchGuard --help 查看用法。\n";
+                return static_cast<int>(ExitCode::InvalidInput);
+            }
+
+            const std::optional<std::size_t> workerCount =
+                parseHashWorkerCount(arguments[index + 1U]);
+            if (!workerCount.has_value()) {
+                error << L"错误：哈希线程数必须是 1 至 64 的整数。\n"
+                      << L"使用 BatchGuard --help 查看用法。\n";
+                return static_cast<int>(ExitCode::InvalidInput);
+            }
+            scanOptions.hashWorkerCount = *workerCount;
+            hasHashWorkerOption = true;
+            ++index;
+            continue;
+        }
+        if (argument.starts_with(L"--")) {
+            error << L"错误：不支持的选项：" << argument << L'\n'
+                  << L"使用 BatchGuard --help 查看用法。\n";
+            return static_cast<int>(ExitCode::InvalidInput);
+        }
+        if (directoryPath.has_value()) {
+            error << L"错误：只允许提供一个目录路径。\n"
+                  << L"使用 BatchGuard --help 查看用法。\n";
+            return static_cast<int>(ExitCode::InvalidInput);
+        }
+        directoryPath = std::filesystem::path{argument};
+    }
+
+    if (!directoryPath.has_value()) {
+        error << L"错误：缺少目录参数。\n"
               << L"使用 BatchGuard --help 查看用法。\n";
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
-    const std::filesystem::path directoryPath{argument};
-    const InputValidationResult validationResult = validateInputDirectory(directoryPath);
+    const InputValidationResult validationResult =
+        validateInputDirectory(*directoryPath);
     if (!validationResult.isValid()) {
-        printInputError(validationResult.error, directoryPath, error);
+        printInputError(validationResult.error, *directoryPath, error);
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
-    const ScanReport report = scanDirectory(directoryPath);
+    const ScanReport report =
+        scanDirectory(*directoryPath, scanOptions, progressCallback);
     printScanReport(report, output);
     if (!report.isComplete()) {
         return static_cast<int>(ExitCode::PartialFailure);

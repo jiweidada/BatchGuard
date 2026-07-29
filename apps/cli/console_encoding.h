@@ -9,6 +9,9 @@ namespace batchguard::cli {
 // 配置当前 Windows 控制台，使其将程序输出解释为 UTF-8。
 void configureConsoleEncoding();
 
+// 判断标准输出是否直接连接到 Windows 控制台。
+[[nodiscard]] bool isStandardOutputConsole() noexcept;
+
 // 将 Windows CLI 边界传入的 UTF-16 文本转换为 UTF-8 字节。
 [[nodiscard]] std::string toUtf8(std::wstring_view text);
 

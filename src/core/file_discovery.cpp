@@ -8,6 +8,21 @@
 namespace batchguard {
 namespace {
 
+void notifyProgress(
+    const ScanProgressCallback& progressCallback,
+    std::size_t completedItems,
+    bool isStageComplete) {
+    if (progressCallback) {
+        progressCallback({
+            ScanProgressStage::Discovery,
+            completedItems,
+            0U,
+            0U,
+            0U,
+            isStageComplete});
+    }
+}
+
 void addDiscoveryFailure(
     FileDiscoveryResult& result,
     const std::filesystem::path& path,
@@ -31,8 +46,15 @@ bool isFailureBefore(const FileFailure& left, const FileFailure& right) {
 }
 
 FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath) {
+    return discoverFiles(rootPath, {});
+}
+
+FileDiscoveryResult discoverFiles(
+    const std::filesystem::path& rootPath,
+    const ScanProgressCallback& progressCallback) {
     FileDiscoveryResult result;
     std::vector<std::filesystem::path> pendingDirectories{rootPath};
+    notifyProgress(progressCallback, 0U, false);
 
     while (!pendingDirectories.empty()) {
         const std::filesystem::path currentDirectory = pendingDirectories.back();
@@ -61,6 +83,7 @@ FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath) {
                 pendingDirectories.push_back(entryPath);
             } else if (std::filesystem::is_regular_file(status)) {
                 result.filePaths.push_back(entryPath);
+                notifyProgress(progressCallback, result.filePaths.size(), false);
             }
 
             iterator.increment(errorCode);
@@ -74,6 +97,7 @@ FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath) {
 
     std::sort(result.filePaths.begin(), result.filePaths.end(), isPathBefore);
     std::sort(result.failures.begin(), result.failures.end(), isFailureBefore);
+    notifyProgress(progressCallback, result.filePaths.size(), true);
     return result;
 }
 

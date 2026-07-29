@@ -12,6 +12,15 @@ void configureConsoleEncoding() {
     SetConsoleOutputCP(CP_UTF8);
 }
 
+bool isStandardOutputConsole() noexcept {
+    const HANDLE outputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (outputHandle == nullptr || outputHandle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    DWORD consoleMode = 0;
+    return GetConsoleMode(outputHandle, &consoleMode) != 0;
+}
+
 std::string toUtf8(std::wstring_view text) {
     if (text.empty()) {
         return {};

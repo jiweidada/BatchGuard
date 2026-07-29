@@ -3,10 +3,13 @@ project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
 
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 
+find_package(Threads REQUIRED)
+
 add_library(batchguard_core STATIC
     src/core/content_fingerprint.cpp
     src/core/duplicate_group.cpp
     src/core/file_discovery.cpp
+    src/core/file_hash_scheduler.cpp
     src/core/file_hasher.cpp
     src/core/input_validator.cpp
     src/core/scanner.cpp
@@ -20,11 +23,13 @@ target_include_directories(batchguard_core
 target_link_libraries(batchguard_core
     PRIVATE
         bcrypt
+        Threads::Threads
 )
 
 add_library(batchguard_cli_support STATIC
     apps/cli/cli_app.cpp
     apps/cli/console_encoding.cpp
+    apps/cli/console_progress.cpp
 )
 
 target_include_directories(batchguard_cli_support
@@ -33,7 +38,7 @@ target_include_directories(batchguard_cli_support
 )
 
 target_link_libraries(batchguard_cli_support
-    PRIVATE
+    PUBLIC
         batchguard_core
 )
 
