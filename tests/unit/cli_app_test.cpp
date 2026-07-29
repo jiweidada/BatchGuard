@@ -180,7 +180,40 @@ TEST(CliAppTest, HashingFailureReturnsTwoAndOtherFileContinues) {
     EXPECT_NE(output.str().find(L"[失败文件]"), std::wstring::npos);
     EXPECT_NE(output.str().find(lockedFile.wstring()), std::wstring::npos);
     EXPECT_NE(output.str().find(L"阶段：读取内容"), std::wstring::npos);
+    EXPECT_NE(output.str().find(L"原因："), std::wstring::npos);
+    EXPECT_EQ(output.str().find(L"原因：\n"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, RepeatedRunsProduceStableReport) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    const std::filesystem::path firstFile = temporaryDirectory.path() / "first.bin";
+    const std::filesystem::path secondFile = temporaryDirectory.path() / "second.bin";
+    std::ofstream firstOutput{firstFile, std::ios::binary};
+    firstOutput << "same contents";
+    firstOutput.close();
+    std::ofstream secondOutput{secondFile, std::ios::binary};
+    secondOutput << "same contents";
+    secondOutput.close();
+    std::wostringstream firstRunOutput;
+    std::wostringstream firstRunError;
+    std::wostringstream secondRunOutput;
+    std::wostringstream secondRunError;
+
+    const int firstExitCode = runCli(
+        {temporaryDirectory.path().wstring()},
+        firstRunOutput,
+        firstRunError);
+    const int secondExitCode = runCli(
+        {temporaryDirectory.path().wstring()},
+        secondRunOutput,
+        secondRunError);
+
+    EXPECT_EQ(firstExitCode, 0);
+    EXPECT_EQ(secondExitCode, 0);
+    EXPECT_EQ(firstRunOutput.str(), secondRunOutput.str());
+    EXPECT_TRUE(firstRunError.str().empty());
+    EXPECT_TRUE(secondRunError.str().empty());
 }
 
 TEST(CliAppTest, DirectoryWithUnicodeAndSpacesReturnsZero) {

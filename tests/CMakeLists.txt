@@ -1,4 +1,5 @@
 add_executable(batchguard_tests
+    integration/robustness_test.cpp
     integration/scanner_test.cpp
     stage1/smoke_test.cpp
     unit/cli_app_test.cpp

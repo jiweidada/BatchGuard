@@ -106,6 +106,7 @@ ctest --test-dir build/release --output-on-failure
 - `docs/测试/阶段3测试.md`：阶段 3 递归文件发现和路径处理。
 - `docs/测试/阶段4测试.md`：阶段 4 大小筛选、SHA-256 和失败隔离。
 - `docs/测试/阶段5测试.md`：阶段 5 重复分组、完整报告和退出码。
+- `docs/测试/阶段6测试.md`：阶段 6 MVP 覆盖矩阵和健壮性回归。
 - `docs/cmake学习.md`、`docs/googletest学习.md`、`docs/git学习.md`：学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。
