@@ -22,13 +22,15 @@ Git 状态、未提交文件和下一步边界。每个阶段实现、验证或�
 
 ## 构建、测试与本地开发
 
-- `cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug`：配置 Debug。
-- `cmake --build build/debug`：构建 Debug 程序和测试。
-- `.\build\debug\BatchGuard.exe`：运行 Debug CLI。
-- `ctest --test-dir build/debug --output-on-failure`：运行 Debug 测试。
-- `cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release`：配置 Release。
-- `cmake --build build/release`：构建 Release 程序和测试。
-- `ctest --test-dir build/release --output-on-failure`：运行 Release 测试。
+本机开发统一使用 CLion CMake Profile，不再另外创建 `build/`。当前 v0.2.0
+开发阶段只维护 `cmake-build-debug/`；Release 配置、部署和完整验收延后到交付
+阶段。开发 Qt GUI 时，Debug Profile 需要设置 `BATCHGUARD_BUILD_GUI=ON`，并通过
+`CMAKE_PREFIX_PATH` 指向与 MSVC 匹配的 Qt 5.14.2 `msvc2017_64` 套件。
+
+- `cmake --build cmake-build-debug`：构建 Debug 程序和测试。
+- `.\cmake-build-debug\BatchGuard.exe`：运行 Debug CLI。
+- `.\cmake-build-debug\BatchGuardGui.exe`：运行 Debug GUI。
+- `ctest --test-dir cmake-build-debug --output-on-failure`：运行 Debug 测试。
 
 不要提交构建产物或个人 IDE 设置。
 

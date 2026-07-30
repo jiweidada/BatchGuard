@@ -1,6 +1,6 @@
 # BatchGuard v0.2.0 Qt 图形界面计划
 
-> 状态：范围与 UI 分层已细化，实现尚未开始。
+> 状态：阶段 10 Qt Debug 兼容性验证已通过，下一步为阶段 11 核心安全取消。
 >
 > 计划日期：2026-07-29。
 >
@@ -88,7 +88,7 @@ Qt 依赖。没有安装 Qt 的环境仍应能关闭 GUI 选项并构建 v0.1.0 
 - 复制文件路径和打开文件所在目录。
 - 显示易读文件大小，并通过工具提示保留精确字节数和估算口径。
 - 中文、空格路径以及大量结果的基本可用性。
-- 核心取消测试、GUI 状态测试和 Debug、Release 回归。
+- 核心取消测试、GUI 状态测试和当前 Debug 回归。
 - Windows Release 部署说明。
 
 ### 3.2 v0.2.0 明确不包含
@@ -477,27 +477,41 @@ GUI 主线程
 建议配置命令：
 
 ```powershell
-cmake -S . -B build/qt-debug -G Ninja `
-    -DCMAKE_BUILD_TYPE=Debug `
-    -DBATCHGUARD_BUILD_GUI=ON `
-    -DCMAKE_PREFIX_PATH=E:/Qt/Qt5.14.2/5.14.2/msvc2017_64
-cmake --build build/qt-debug
+cmake --build cmake-build-debug --target batchguard_gui
 ```
 
-普通 PowerShell 当前没有直接找到 `cl.exe` 和 `ninja.exe`，上述命令必须在已加载
-工具链的终端运行，或改用配置了相同参数的 CLion CMake Profile。运行未部署的最小
-窗口时，需要让对应 Qt `bin` 和平台插件在本地运行环境中可见；正式 DLL 收集仍留到
-阶段 17。
+`cmake-build-debug` 由 CLion Debug Profile 维护。Profile 必须设置
+`BATCHGUARD_BUILD_GUI=ON`，并通过 `CMAKE_PREFIX_PATH` 指向 Qt 5.14.2
+`msvc2017_64`。不要在编辑器中直接运行 `main.cpp`；单文件编译会绕过 CMake
+提供的 `/utf-8`、Qt include 和链接参数。
+
+GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行需要的 DLL 和
+平台插件复制到可执行文件目录。阶段 17 仍负责 Release 发布目录、干净环境验证和
+许可证材料，不重复解决日常开发启动问题。
 
 通过条件：
 
-- Debug、Release 均能配置和链接。
-- 最小窗口能启动和正常关闭。
+- Debug 能配置和链接。
+- Debug 最小窗口能启动和正常关闭。
 - `AUTOMOC`、`AUTOUIC` 和中文窗口文本工作正常。
 - GUI 与 Qt 位数、编译器 ABI 和运行库匹配。
-- 原 Debug、Release CLI 和 73 项 CTest 无回归。
+- 原 Debug CLI 和 73 项 CTest 无回归。
+- Release 兼容性、部署和干净环境验收延后到阶段 17。
 
 如果本阶段失败，暂停 GUI 业务实现，先决定兼容处理或升级 Qt。
+
+实际结果（2026-07-30）：
+
+- Qt 5.14.2 `msvc2017_64`、MSVC 19.29、Ninja 1.13.2 和 CMake 4.2.0-rc1
+  完成 Debug 配置、编译和链接。
+- `AUTOMOC`、`AUTOUIC` 和 Windows GUI 入口工作正常。
+- Debug `BatchGuardGui.exe` 成功启动、正常关闭并返回 `0`。
+- GUI 开启的 Debug CTest 发现 73 项，0 失败，1 项 Skipped。
+- 当前开发目录统一为 CLion 的 `cmake-build-debug`；独立 `build/` 已删除。
+- `windeployqt` 自动部署 Debug Qt DLL 和 `platforms/qwindowsd.dll`，直接启动
+  `BatchGuardGui.exe` 不再出现 `0xC0000135`。
+- 当前不创建或维护 `cmake-build-release`；Release 验证延后到阶段 17。
+- 详细命令和结果见 [阶段10测试.md](../测试/阶段10测试.md)。
 
 ### 阶段 11：核心安全取消
 
@@ -523,7 +537,8 @@ cmake --build build/qt-debug
 通过条件：
 
 - 核心测试不依赖 Qt。
-- Debug、Release 全量测试通过。
+- 当前 Debug 全量测试通过。
+- Release 回归在阶段 17 统一执行。
 - ThreadSanitizer 当前环境不可用时，使用可控调度测试验证线程生命周期。
 
 ### 阶段 12：GUI 主窗口与状态机
@@ -663,7 +678,7 @@ Qt Windows 部署参考：
 | 核心集成 | GoogleTest | 临时目录完整扫描、多线程取消 |
 | GUI 单元 | Qt Test | 状态机、模型、信号和路径转换 |
 | GUI 集成 | Qt Test + CTest | 后台扫描、进度、取消和窗口关闭 |
-| 人工验收 | Debug/Release GUI | DPI、布局、大目录和部署运行 |
+| 人工验收 | Debug GUI；交付时增加 Release GUI | DPI、布局、大目录和部署运行 |
 
 所有文件系统自动化测试继续使用临时目录，不依赖固定盘符或
 `E:\Qt\Qt5.14.2`。Qt SDK 路径只能出现在本地配置示例和环境说明中。
@@ -675,6 +690,8 @@ Qt Windows 部署参考：
 - Qt Debug 库只用于 Debug，Release 库只用于 Release。
 - 不把 Qt SDK 的绝对路径硬编码进 `CMakeLists.txt`。
 - 本地通过 `CMAKE_PREFIX_PATH` 或 CLion CMake Profile 指定 Qt 套件。
+- GUI 构建后使用 CMake 找到的同一 Qt 套件执行 `windeployqt`，并将其 `bin`
+  临时置于部署命令的 `PATH` 首位，禁止混用 Anaconda 等其他 Qt 安装。
 - 部署必须使用与 GUI 实际链接版本一致的 `windeployqt.exe`。
 - 发布前必须确认 Visual C++ Runtime 和 Qt 平台插件完整。
 
@@ -731,7 +748,7 @@ docs: 完成 v0.2.0 GUI 交付文档
 
 Qt 版本升级、图标资源、部署脚本和功能代码不能无理由塞进同一个提交。
 
-## 15. 开始编码前的确认点
+## 15. 阶段 10 开始前的确认点（历史）
 
 进入阶段 10 前确认：
 
@@ -743,4 +760,4 @@ Qt 版本升级、图标资源、部署脚本和功能代码不能无理由塞�
 6. 结果使用“结论摘要、主要指标、重复组主表、所选组路径详情”的渐进展示结构。
 7. 理论可节省空间只作为只读估算，不提供清理动作，也不暗示真实物理空间已释放。
 
-以上七项确认后，从阶段 10 的最小空窗口开始，不跨阶段一次性生成完整 GUI。
+以上七项已经落实。阶段 10 从最小空窗口开始，未跨阶段生成完整 GUI。

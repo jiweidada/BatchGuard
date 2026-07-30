@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 4.2)
 project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
 
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
+option(BATCHGUARD_BUILD_GUI "Build the BatchGuard Qt GUI" OFF)
 
 find_package(Threads REQUIRED)
 
@@ -75,6 +76,75 @@ if(MSVC)
     target_compile_options(batchguard_core PRIVATE /utf-8)
     target_compile_options(batchguard_cli_support PRIVATE /utf-8)
     target_compile_options(batchguard_cli PRIVATE /utf-8)
+endif()
+
+if(BATCHGUARD_BUILD_GUI)
+    find_package(Qt5 5.14 REQUIRED COMPONENTS Widgets)
+
+    add_executable(batchguard_gui WIN32
+        apps/gui/main.cpp
+        apps/gui/main_window.cpp
+        apps/gui/main_window.h
+        apps/gui/main_window.ui
+    )
+
+    target_link_libraries(batchguard_gui
+        PRIVATE
+            Qt5::Widgets
+    )
+
+    set_target_properties(batchguard_gui
+        PROPERTIES
+            AUTOMOC ON
+            AUTOUIC ON
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED YES
+            CXX_EXTENSIONS NO
+            OUTPUT_NAME BatchGuardGui
+    )
+
+    if(MSVC)
+        target_compile_options(batchguard_gui PRIVATE /utf-8)
+    endif()
+
+    if(WIN32)
+        get_target_property(
+            batchguardQtQmakeExecutable
+            Qt5::qmake
+            IMPORTED_LOCATION
+        )
+        get_filename_component(
+            batchguardQtBinDirectory
+            "${batchguardQtQmakeExecutable}"
+            DIRECTORY
+        )
+        find_program(
+            BATCHGUARD_WINDEPLOYQT_EXECUTABLE
+            NAMES windeployqt
+            HINTS "${batchguardQtBinDirectory}"
+            NO_DEFAULT_PATH
+            REQUIRED
+        )
+
+        # 将本地运行所需的 Qt DLL 和平台插件部署到可执行文件目录。
+        add_custom_command(
+            TARGET batchguard_gui
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}"
+                -E
+                env
+                "PATH=${batchguardQtBinDirectory};$ENV{PATH}"
+                "${BATCHGUARD_WINDEPLOYQT_EXECUTABLE}"
+                --no-translations
+                --no-system-d3d-compiler
+                --no-compiler-runtime
+                --verbose 0
+                "$<TARGET_FILE:batchguard_gui>"
+            COMMENT "Deploying the Qt runtime for BatchGuardGui"
+            VERBATIM
+        )
+    endif()
 endif()
 
 if(BATCHGUARD_BUILD_TESTS)

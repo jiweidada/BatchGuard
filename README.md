@@ -23,37 +23,35 @@ docs/                      设计、学习和测试文档
 - 支持 C++20 的 MSVC
 - CMake 4.2 或更高版本
 - Ninja
+- 构建 GUI 时需要 Qt 5.14.2 `msvc2017_64`
 
 GoogleTest 1.17.0 已保存在 `Third_Party/googletest/`，配置构建时不需要重复下载。
 
 ## 使用 CLion
 
 1. 打开项目根目录。
-2. 执行 **Reload CMake Project**。
-3. 选择 `batchguard_cli`，在运行配置中填写目录参数后运行程序。
-4. 打开 `tests/` 下的测试文件，点击测试左侧绿色按钮运行 GTest。
+2. Debug Profile 使用 `cmake-build-debug`，不要另外创建 `build/`。
+3. 开发 GUI 时添加 `-DBATCHGUARD_BUILD_GUI=ON`，并通过
+   `CMAKE_PREFIX_PATH` 指向本机 Qt 5.14.2 `msvc2017_64` 目录。
+4. 执行 **Reload CMake Project**。
+5. 运行 GUI 时选择 CMake 目标 `batchguard_gui`，不要使用单文件 `main.cpp` 配置。
+6. 打开 `tests/` 下的测试文件，点击测试左侧绿色按钮运行 GTest。
 
-## 命令行构建
+## 使用 CLion 构建目录
 
-请在已经加载 MSVC 环境并且能找到 CMake、Ninja 的终端中执行。
+CLion 完成 Profile 配置后，也可以在已加载 MSVC 环境的终端复用同一构建目录。
 
 Debug：
 
 ```powershell
-cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug
-ctest --test-dir build/debug --output-on-failure
-.\build\debug\BatchGuard.exe --help
+cmake --build cmake-build-debug
+ctest --test-dir cmake-build-debug --output-on-failure
+.\cmake-build-debug\BatchGuard.exe --help
+.\cmake-build-debug\BatchGuardGui.exe
 ```
 
-Release：
-
-```powershell
-cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build/release
-ctest --test-dir build/release --output-on-failure
-.\build\release\BatchGuard.exe --version
-```
+当前 v0.2.0 开发阶段只维护 Debug Profile。Release 配置、部署和完整验收延后到
+交付阶段，不要求本地持续保留 `cmake-build-release/`。
 
 ## 使用方式
 
@@ -116,14 +114,13 @@ Windows CNG `BCrypt` 和 64 KiB 固定缓冲区分块读取，不一次性加载
 通过 CTest 运行：
 
 ```powershell
-ctest --test-dir build/debug --output-on-failure
-ctest --test-dir build/release --output-on-failure
+ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
 直接运行 GoogleTest：
 
 ```powershell
-.\build\debug\tests\batchguard_tests.exe --gtest_color=no
+.\cmake-build-debug\tests\batchguard_tests.exe --gtest_color=no
 ```
 
 不需要测试目标时，可以在配置阶段添加：
