@@ -1,6 +1,7 @@
 #include "duplicate_group_model.h"
 #include "duplicate_path_model.h"
 #include "failure_model.h"
+#include "gui_log_model.h"
 #include "main_window.h"
 #include "result_summary.h"
 #include "scan_controller.h"
@@ -12,6 +13,7 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListView>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -106,6 +108,8 @@ private slots:
     void resultModelsExposeStableRowsAndRawSortValues();
     void duplicateGroupModelExposesAllColumnsAndRoles();
     void failureModelExposesRowsColumnsAndErrorText();
+    void guiLogModelKeepsSimplifiedBoundedRecords();
+    void mainWindowRoutesSameLogsToPanelAndTerminal();
     void resultModelsHandleManyRowsWithoutCopyingReports();
     void mainWindowShowsCompleteReportAndHidesCancelledResults();
     void sortingDuplicateGroupsPreservesSelectedGroup();
@@ -238,6 +242,14 @@ void ScanControllerTest::cancelRequestIsSentOnlyOnce() {
     auto execution = std::make_unique<FakeScanExecution>();
     FakeScanExecution* executionPointer = execution.get();
     ScanController controller{std::move(execution)};
+    std::vector<LogRecord> records;
+    connect(
+        &controller,
+        &ScanController::logRecordCreated,
+        &controller,
+        [&records](const LogRecord& record) {
+            records.push_back(record);
+        });
     controller.setDirectoryPath(directory.path());
     controller.startScan();
 
@@ -247,6 +259,14 @@ void ScanControllerTest::cancelRequestIsSentOnlyOnce() {
     QCOMPARE(controller.state(), ScanState::Cancelling);
     QVERIFY(!controller.canCancel());
     QCOMPARE(executionPointer->cancelRequestCount, 1);
+    QCOMPARE(
+        std::count_if(
+            records.begin(),
+            records.end(),
+            [](const LogRecord& record) {
+                return record.summary == "请求安全取消";
+            }),
+        1);
 
     executionPointer->finishCancelled(controller.currentScanId());
     QCOMPARE(controller.state(), ScanState::Cancelled);
@@ -455,6 +475,14 @@ void ScanControllerTest::realBackgroundScanCompletesAndReportsProgress() {
     QSignalSpy progressSpy{
         &controller,
         &ScanController::scanProgressChanged};
+    std::vector<QThread*> logThreads;
+    connect(
+        &controller,
+        &ScanController::logRecordCreated,
+        &controller,
+        [&logThreads](const LogRecord&) {
+            logThreads.push_back(QThread::currentThread());
+        });
     bool didGuiTimerRun = false;
     QTimer::singleShot(0, &controller, [&didGuiTimerRun]() {
         didGuiTimerRun = true;
@@ -474,6 +502,13 @@ void ScanControllerTest::realBackgroundScanCompletesAndReportsProgress() {
     QVERIFY(report);
     QCOMPARE(report->duplicateGroups.size(), std::size_t{1U});
     QVERIFY(progressSpy.count() >= 4);
+    QVERIFY(!logThreads.empty());
+    QVERIFY(std::all_of(
+        logThreads.begin(),
+        logThreads.end(),
+        [&controller](QThread* thread) {
+            return thread == controller.thread();
+        }));
 
     std::vector<ScanProgressStage> stages;
     for (const QList<QVariant>& arguments : progressSpy) {
@@ -757,6 +792,106 @@ void ScanControllerTest::failureModelExposesRowsColumnsAndErrorText() {
     QCOMPARE(
         model.stageSummary(),
         QStringLiteral("文件发现 1，读取信息 1，内容指纹 1"));
+}
+
+void ScanControllerTest::guiLogModelKeepsSimplifiedBoundedRecords() {
+    GuiLogModel model;
+    model.appendRecord(makeLogRecord(
+        LogLevel::Debug,
+        LogLayer::GuiExecution,
+        "调试细节"));
+    QCOMPARE(model.rowCount(), 0);
+
+    model.appendRecord(makeLogRecord(
+        LogLevel::Info,
+        LogLayer::GuiController,
+        "开始扫描",
+        {{"hashWorkers", "4"}}));
+    QCOMPARE(model.rowCount(), 1);
+    const QModelIndex firstIndex = model.index(0, 0);
+    QVERIFY(firstIndex.data().toString().contains(
+        QStringLiteral("INFO：扫描控制：开始扫描")));
+    QVERIFY(!firstIndex.data().toString().contains(
+        QStringLiteral("hashWorkers")));
+    QVERIFY(firstIndex.data(GuiLogModel::FullTextRole).toString().contains(
+        QStringLiteral("hashWorkers=4")));
+
+    model.clear();
+    for (std::size_t index = 0;
+         index <= GuiLogModel::kMaximumRecordCount;
+         ++index) {
+        model.appendRecord(makeLogRecord(
+            LogLevel::Info,
+            LogLayer::CoreDiscovery,
+            "状态 " + std::to_string(index)));
+    }
+
+    QCOMPARE(
+        model.rowCount(),
+        static_cast<int>(GuiLogModel::kMaximumRecordCount));
+    QCOMPARE(
+        model.index(0, 0).data(GuiLogModel::SummaryRole).toString(),
+        QStringLiteral("状态 1"));
+}
+
+void ScanControllerTest::mainWindowRoutesSameLogsToPanelAndTerminal() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    auto execution = std::make_unique<FakeScanExecution>();
+    FakeScanExecution* executionPointer = execution.get();
+    std::vector<LogRecord> terminalRecords;
+    MainWindow window{
+        std::move(execution),
+        [&terminalRecords](const LogRecord& record) {
+            terminalRecords.push_back(record);
+        }};
+    auto* directoryInput =
+        window.findChild<QLineEdit*>(QStringLiteral("directoryLineEdit"));
+    auto* startButton =
+        window.findChild<QPushButton*>(QStringLiteral("startButton"));
+    auto* logList =
+        window.findChild<QListView*>(QStringLiteral("logListView"));
+    QVERIFY(directoryInput);
+    QVERIFY(startButton);
+    QVERIFY(logList);
+    QCOMPARE(logList->model()->rowCount(), 1);
+
+    directoryInput->setText(directory.path());
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    const quint64 scanId = executionPointer->requests.front().scanId;
+    executionPointer->sendProgress(
+        scanId,
+        {
+            ScanProgressStage::Discovery,
+            1U,
+            0U,
+            0U,
+            0U,
+            false});
+    executionPointer->finishCompleted(
+        scanId,
+        std::make_shared<ScanReport>());
+
+    QCOMPARE(logList->model()->rowCount(), 4);
+    QVERIFY(std::any_of(
+        terminalRecords.begin(),
+        terminalRecords.end(),
+        [](const LogRecord& record) {
+            return record.level == LogLevel::Debug &&
+                record.summary == "后台扫描线程已回收";
+        }));
+    QVERIFY(std::any_of(
+        terminalRecords.begin(),
+        terminalRecords.end(),
+        [](const LogRecord& record) {
+            return record.level == LogLevel::Info &&
+                record.summary == "扫描完成";
+    }));
+    for (const LogRecord& record : terminalRecords) {
+        QVERIFY(
+            formatLogRecord(record).find(directory.path().toStdString()) ==
+            std::string::npos);
+    }
 }
 
 void ScanControllerTest::resultModelsHandleManyRowsWithoutCopyingReports() {

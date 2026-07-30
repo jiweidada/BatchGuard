@@ -192,6 +192,49 @@
      </widget>
     </item>
     <item>
+     <widget class="QGroupBox" name="logGroup">
+      <property name="title">
+       <string>运行日志</string>
+      </property>
+      <layout class="QVBoxLayout" name="logLayout">
+       <item>
+        <widget class="QListView" name="logListView">
+         <property name="minimumSize">
+          <size><width>0</width><height>120</height></size>
+         </property>
+         <property name="editTriggers">
+          <set>QAbstractItemView::NoEditTriggers</set>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="logActionsLayout">
+         <item>
+          <widget class="QPushButton" name="clearLogButton">
+           <property name="text">
+            <string>清空日志</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="logActionSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size><width>40</width><height>20</height></size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
      <widget class="QLabel" name="resultPlaceholderLabel">
       <property name="text">
        <string>完成扫描后，这里将显示重复文件和处理失败详情。</string>

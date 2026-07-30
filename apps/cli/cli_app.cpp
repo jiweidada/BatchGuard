@@ -187,20 +187,48 @@ int runCli(
     const std::vector<std::wstring>& arguments,
     std::wostream& output,
     std::wostream& error,
-    const ScanProgressCallback& progressCallback) {
+    const ScanProgressCallback& progressCallback,
+    const LogCallback& logCallback) {
+    const auto publishLog = [&logCallback](LogRecord record) {
+        if (logCallback) {
+            logCallback(record);
+        }
+    };
+    const auto rejectArguments =
+        [&publishLog](std::string reason) {
+            publishLog(makeLogRecord(
+                LogLevel::Warning,
+                LogLayer::Cli,
+                "命令行参数无效",
+                {{"reason", std::move(reason)}}));
+            return static_cast<int>(ExitCode::InvalidInput);
+        };
+    publishLog(makeLogRecord(
+        LogLevel::Debug,
+        LogLayer::Cli,
+        "开始解析命令行",
+        {{"argumentCount", std::to_string(arguments.size())}}));
     if (arguments.empty()) {
         error << L"错误：缺少目录参数。\n"
               << L"使用 BatchGuard --help 查看用法。\n";
-        return static_cast<int>(ExitCode::InvalidInput);
+        return rejectArguments("missingDirectory");
     }
 
     // 帮助和版本信息必须独立使用，避免忽略同一命令中的其他参数。
     if (arguments.size() == 1U && arguments.front() == kHelpOption) {
         printUsage(output);
+        publishLog(makeLogRecord(
+            LogLevel::Info,
+            LogLayer::Cli,
+            "显示帮助信息"));
         return static_cast<int>(ExitCode::Success);
     }
     if (arguments.size() == 1U && arguments.front() == kVersionOption) {
         output << L"BatchGuard " << BATCHGUARD_VERSION << L'\n';
+        publishLog(makeLogRecord(
+            LogLevel::Info,
+            LogLayer::Cli,
+            "显示版本信息"));
         return static_cast<int>(ExitCode::Success);
     }
 
@@ -213,12 +241,12 @@ int runCli(
             if (hasHashWorkerOption) {
                 error << L"错误：--hash-workers 只能指定一次。\n"
                       << L"使用 BatchGuard --help 查看用法。\n";
-                return static_cast<int>(ExitCode::InvalidInput);
+                return rejectArguments("duplicateHashWorkers");
             }
             if (index + 1U >= arguments.size()) {
                 error << L"错误：--hash-workers 后缺少线程数。\n"
                       << L"使用 BatchGuard --help 查看用法。\n";
-                return static_cast<int>(ExitCode::InvalidInput);
+                return rejectArguments("missingHashWorkerCount");
             }
 
             const std::optional<std::size_t> workerCount =
@@ -226,7 +254,7 @@ int runCli(
             if (!workerCount.has_value()) {
                 error << L"错误：哈希线程数必须是 1 至 64 的整数。\n"
                       << L"使用 BatchGuard --help 查看用法。\n";
-                return static_cast<int>(ExitCode::InvalidInput);
+                return rejectArguments("invalidHashWorkerCount");
             }
             scanOptions.hashWorkerCount = *workerCount;
             hasHashWorkerOption = true;
@@ -236,12 +264,12 @@ int runCli(
         if (argument.starts_with(L"--")) {
             error << L"错误：不支持的选项：" << argument << L'\n'
                   << L"使用 BatchGuard --help 查看用法。\n";
-            return static_cast<int>(ExitCode::InvalidInput);
+            return rejectArguments("unsupportedOption");
         }
         if (directoryPath.has_value()) {
             error << L"错误：只允许提供一个目录路径。\n"
                   << L"使用 BatchGuard --help 查看用法。\n";
-            return static_cast<int>(ExitCode::InvalidInput);
+            return rejectArguments("multipleDirectories");
         }
         directoryPath = std::filesystem::path{argument};
     }
@@ -249,19 +277,61 @@ int runCli(
     if (!directoryPath.has_value()) {
         error << L"错误：缺少目录参数。\n"
               << L"使用 BatchGuard --help 查看用法。\n";
-        return static_cast<int>(ExitCode::InvalidInput);
+        return rejectArguments("missingDirectory");
     }
 
     const InputValidationResult validationResult =
         validateInputDirectory(*directoryPath);
     if (!validationResult.isValid()) {
         printInputError(validationResult.error, *directoryPath, error);
+        publishLog(makeLogRecord(
+            LogLevel::Warning,
+            LogLayer::Cli,
+            "输入目录校验失败",
+            {
+                {
+                    "validationError",
+                    std::to_string(
+                        static_cast<int>(validationResult.error))}}));
         return static_cast<int>(ExitCode::InvalidInput);
     }
 
+    publishLog(makeLogRecord(
+        LogLevel::Info,
+        LogLayer::Cli,
+        "开始扫描",
+        {{"hashWorkers", std::to_string(scanOptions.hashWorkerCount)}}));
+    std::optional<ScanProgressStage> lastLoggedStage;
+    ScanProgressCallback combinedProgressCallback;
+    if (progressCallback || logCallback) {
+        combinedProgressCallback =
+            [&progressCallback,
+             &logCallback,
+             &lastLoggedStage](const ScanProgress& progress) {
+                if (progressCallback) {
+                    progressCallback(progress);
+                }
+                const bool isStageChange =
+                    !lastLoggedStage.has_value() ||
+                    *lastLoggedStage != progress.stage;
+                if (logCallback &&
+                    (isStageChange || progress.isStageComplete)) {
+                    logCallback(makeProgressLogRecord(progress));
+                    lastLoggedStage = progress.stage;
+                }
+            };
+    }
     const ScanReport report =
-        scanDirectory(*directoryPath, scanOptions, progressCallback);
+        scanDirectory(*directoryPath, scanOptions, combinedProgressCallback);
     printScanReport(report, output);
+    publishLog(makeLogRecord(
+        report.isComplete() ? LogLevel::Info : LogLevel::Warning,
+        LogLayer::Cli,
+        report.isComplete() ? "扫描完成" : "扫描完成，存在部分失败",
+        {
+            {"discoveredFiles", std::to_string(report.discoveredFileCount)},
+            {"duplicateGroups", std::to_string(report.duplicateGroups.size())},
+            {"failures", std::to_string(report.failures.size())}}));
     if (!report.isComplete()) {
         return static_cast<int>(ExitCode::PartialFailure);
     }

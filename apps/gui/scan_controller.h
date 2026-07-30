@@ -3,11 +3,14 @@
 #include "scan_execution.h"
 #include "scan_state.h"
 
+#include "batchguard/logging/logging.h"
+
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
 #include <memory>
+#include <optional>
 
 namespace batchguard::gui {
 
@@ -45,6 +48,7 @@ signals:
     void viewStateChanged();
     void scanProgressChanged(const batchguard::ScanProgress& progress);
     void reportChanged(const batchguard::gui::SharedScanReport& report);
+    void logRecordCreated(const batchguard::LogRecord& record);
 
 private slots:
     void handleCompleted(
@@ -59,6 +63,7 @@ private slots:
 private:
     void validateDirectory();
     void setState(ScanState state);
+    void publishLog(LogRecord record);
     [[nodiscard]] bool acceptsEvent(quint64 scanId) const noexcept;
 
     std::unique_ptr<ScanExecution> execution_;
@@ -72,6 +77,9 @@ private:
     QElapsedTimer scanTimer_;
     qint64 elapsedMilliseconds_{};
     SharedScanReport report_;
+    std::optional<ScanProgressStage> lastLoggedProgressStage_;
 };
 
 }
+
+Q_DECLARE_METATYPE(batchguard::LogRecord)

@@ -3,6 +3,7 @@
 #include "duplicate_group_model.h"
 #include "duplicate_path_model.h"
 #include "failure_model.h"
+#include "gui_log_model.h"
 #include "result_summary.h"
 #include "scan_controller.h"
 #include "threaded_scan_execution.h"
@@ -66,11 +67,18 @@ int progressValue(const ScanProgress& progress) {
 }
 
 MainWindow::MainWindow(QWidget* parent)
-    : MainWindow{createDefaultExecution(), parent} {
+    : MainWindow{createDefaultExecution(), {}, parent} {
 }
 
 MainWindow::MainWindow(
     std::unique_ptr<ScanExecution> execution,
+    QWidget* parent)
+    : MainWindow{std::move(execution), {}, parent} {
+}
+
+MainWindow::MainWindow(
+    std::unique_ptr<ScanExecution> execution,
+    LogCallback terminalLogCallback,
     QWidget* parent)
     : QMainWindow{parent},
       ui_{std::make_unique<Ui::MainWindow>()},
@@ -78,12 +86,15 @@ MainWindow::MainWindow(
           std::move(execution))},
       duplicateGroupModel_{std::make_unique<DuplicateGroupModel>()},
       duplicatePathModel_{std::make_unique<DuplicatePathModel>()},
-      failureModel_{std::make_unique<FailureModel>()} {
+      failureModel_{std::make_unique<FailureModel>()},
+      guiLogModel_{std::make_unique<GuiLogModel>()},
+      terminalLogCallback_{std::move(terminalLogCallback)} {
     ui_->setupUi(this);
     ui_->hashWorkerSpinBox->setValue(controller_->hashWorkerCount());
     ui_->duplicateGroupTable->setModel(duplicateGroupModel_.get());
     ui_->duplicatePathTable->setModel(duplicatePathModel_.get());
     ui_->failureTable->setModel(failureModel_.get());
+    ui_->logListView->setModel(guiLogModel_.get());
     ui_->duplicateGroupTable->horizontalHeader()->setStretchLastSection(true);
     ui_->duplicatePathTable->horizontalHeader()->setStretchLastSection(true);
     ui_->failureTable->horizontalHeader()->setStretchLastSection(true);
@@ -127,6 +138,11 @@ MainWindow::MainWindow(
         &MainWindow::renderProgress);
     connect(
         controller_.get(),
+        &ScanController::logRecordCreated,
+        this,
+        &MainWindow::handleLogRecord);
+    connect(
+        controller_.get(),
         &ScanController::reportChanged,
         this,
         &MainWindow::showReport);
@@ -152,9 +168,23 @@ MainWindow::MainWindow(
         &QPushButton::clicked,
         this,
         &MainWindow::openSelectedPathDirectory);
+    connect(
+        ui_->clearLogButton,
+        &QPushButton::clicked,
+        guiLogModel_.get(),
+        &GuiLogModel::clear);
+    connect(
+        guiLogModel_.get(),
+        &QAbstractItemModel::rowsInserted,
+        ui_->logListView,
+        &QListView::scrollToBottom);
 
     renderState();
     showReport({});
+    handleLogRecord(makeLogRecord(
+        LogLevel::Info,
+        LogLayer::GuiController,
+        "界面已就绪"));
 }
 
 MainWindow::~MainWindow() = default;
@@ -244,6 +274,13 @@ void MainWindow::renderProgress(const ScanProgress& progress) {
                 .arg(progress.completedItems)
                 .arg(progress.totalItems));
     }
+}
+
+void MainWindow::handleLogRecord(const LogRecord& record) {
+    if (terminalLogCallback_) {
+        terminalLogCallback_(record);
+    }
+    guiLogModel_->appendRecord(record);
 }
 
 void MainWindow::showReport(const SharedScanReport& report) {

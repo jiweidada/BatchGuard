@@ -27,6 +27,15 @@ target_link_libraries(batchguard_core
         Threads::Threads
 )
 
+add_library(batchguard_logging STATIC
+    src/logging/logging.cpp
+)
+
+target_include_directories(batchguard_logging
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 add_library(batchguard_cli_support STATIC
     apps/cli/cli_app.cpp
     apps/cli/console_encoding.cpp
@@ -41,6 +50,7 @@ target_include_directories(batchguard_cli_support
 target_link_libraries(batchguard_cli_support
     PUBLIC
         batchguard_core
+        batchguard_logging
 )
 
 target_compile_definitions(batchguard_cli_support
@@ -59,6 +69,7 @@ target_link_libraries(batchguard_cli
 
 set_target_properties(
     batchguard_core
+    batchguard_logging
     batchguard_cli_support
     batchguard_cli
     PROPERTIES
@@ -74,6 +85,7 @@ set_target_properties(batchguard_cli
 
 if(MSVC)
     target_compile_options(batchguard_core PRIVATE /utf-8)
+    target_compile_options(batchguard_logging PRIVATE /utf-8)
     target_compile_options(batchguard_cli_support PRIVATE /utf-8)
     target_compile_options(batchguard_cli PRIVATE /utf-8)
 endif()
@@ -92,6 +104,8 @@ if(BATCHGUARD_BUILD_GUI)
         apps/gui/duplicate_path_model.h
         apps/gui/failure_model.cpp
         apps/gui/failure_model.h
+        apps/gui/gui_log_model.cpp
+        apps/gui/gui_log_model.h
         apps/gui/main_window.cpp
         apps/gui/main_window.h
         apps/gui/main_window.ui
@@ -113,11 +127,14 @@ if(BATCHGUARD_BUILD_GUI)
     target_link_libraries(batchguard_gui_support
         PUBLIC
             batchguard_core
+            batchguard_logging
             Qt5::Widgets
     )
 
     add_executable(batchguard_gui WIN32
         apps/gui/main.cpp
+        apps/gui/terminal_console.cpp
+        apps/gui/terminal_console.h
     )
 
     target_link_libraries(batchguard_gui

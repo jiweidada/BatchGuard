@@ -1,6 +1,6 @@
 # BatchGuard v0.2.0 Qt 图形界面计划
 
-> 状态：阶段 15 GUI 自动化补强已完成，下一步为阶段 16 人工界面与真实目录验收。
+> 状态：阶段 16 结构化日志与双端展示已完成，下一步为阶段 17 人工验收。
 >
 > 计划日期：2026-07-29。
 >
@@ -190,10 +190,11 @@ Idle
 
 ### 6.1 CMake 目标
 
-计划新增以下目标：
+已新增以下目标：
 
 | 目标 | 类型 | 职责 |
 |---|---|---|
+| `batchguard_logging` | 静态库 | 标准 C++ 结构化日志、格式化和终端输出 |
 | `batchguard_gui_support` | 静态库 | 主窗口、控制器、模型和 Qt 适配 |
 | `batchguard_gui` | GUI 可执行程序 | 创建 `QApplication` 并组装窗口 |
 | `batchguard_gui_tests` | 测试程序 | Qt 状态、信号和数据模型测试 |
@@ -202,18 +203,23 @@ Idle
 
 ```text
 batchguard_cli ───────> batchguard_cli_support ───────> batchguard_core
+                                      │
+                                      └───────────────> batchguard_logging
 
 batchguard_gui ───────> batchguard_gui_support ───────> batchguard_core
                                       │
+                                      ├───────────────> batchguard_logging
                                       └───────────────> Qt5::Widgets
 
 batchguard_tests ─────────────────────────────────────> batchguard_core
+batchguard_tests ─────────────────────────────────────> batchguard_logging
 batchguard_gui_tests ─> batchguard_gui_support ───────> Qt5::Test
 ```
 
 约束：
 
 - `batchguard_core` 不包含 `QObject`、`QString`、信号或槽。
+- `batchguard_core` 不依赖日志输出设施，应用层根据核心进度发布日志。
 - CLI 不依赖 GUI，GUI 不依赖 CLI 展示代码。
 - 核心报告继续使用标准 C++ 类型。
 - GUI 适配层负责标准 C++ 路径、错误和报告到 Qt 展示类型的转换。
@@ -234,8 +240,8 @@ apps/
     ├── scan_controller.h
     ├── scan_controller.cpp
     ├── scan_state.h
-    ├── scan_worker.h
-    ├── scan_worker.cpp
+    ├── threaded_scan_execution.h
+    ├── threaded_scan_execution.cpp
     ├── result_summary.h
     ├── result_summary.cpp
     ├── duplicate_group_model.h
@@ -243,7 +249,17 @@ apps/
     ├── duplicate_path_model.h
     ├── duplicate_path_model.cpp
     ├── failure_model.h
-    └── failure_model.cpp
+    ├── failure_model.cpp
+    ├── gui_log_model.h
+    ├── gui_log_model.cpp
+    ├── terminal_console.h
+    └── terminal_console.cpp
+
+include/batchguard/logging/
+└── logging.h
+
+src/logging/
+└── logging.cpp
 
 tests/
 ├── unit/
@@ -266,12 +282,16 @@ ScanController（GUI 线程中的唯一状态源）
     │                    ├── ResultSummary
     │                    ├── DuplicateGroupModel
     │                    ├── DuplicatePathModel
-    │                    └── FailureModel
+    │                    ├── FailureModel
+    │                    └── GuiLogModel
     ▼
 QThread + ScanWorker
     │ 同步调用、转发进度
     ▼
 batchguard_core
+    │ 进度快照
+    ▼
+batchguard_logging ───> 终端完整日志 / GUI 简化状态
 ```
 
 - `MainWindow` 只读取控件输入、转发用户命令并渲染控制器状态，不直接扫描目录。
@@ -486,7 +506,7 @@ cmake --build cmake-build-debug --target batchguard_gui
 提供的 `/utf-8`、Qt include 和链接参数。
 
 GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行需要的 DLL 和
-平台插件复制到可执行文件目录。阶段 17 仍负责 Release 发布目录、干净环境验证和
+平台插件复制到可执行文件目录。阶段 18 仍负责 Release 发布目录、干净环境验证和
 许可证材料，不重复解决日常开发启动问题。
 
 通过条件：
@@ -496,7 +516,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - `AUTOMOC`、`AUTOUIC` 和中文窗口文本工作正常。
 - GUI 与 Qt 位数、编译器 ABI 和运行库匹配。
 - 原 Debug CLI 和 73 项 CTest 无回归。
-- Release 兼容性、部署和干净环境验收延后到阶段 17。
+- Release 兼容性、部署和干净环境验收延后到阶段 18。
 
 如果本阶段失败，暂停 GUI 业务实现，先决定兼容处理或升级 Qt。
 
@@ -510,7 +530,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - 当前开发目录统一为 CLion 的 `cmake-build-debug`；独立 `build/` 已删除。
 - `windeployqt` 自动部署 Debug Qt DLL 和 `platforms/qwindowsd.dll`，直接启动
   `BatchGuardGui.exe` 不再出现 `0xC0000135`。
-- 当前不创建或维护 `cmake-build-release`；Release 验证延后到阶段 17。
+- 当前不创建或维护 `cmake-build-release`；Release 验证延后到阶段 18。
 - 详细命令和结果见 [阶段10测试.md](../测试/阶段10测试.md)。
 
 ### 阶段 11：核心安全取消
@@ -538,7 +558,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 
 - 核心测试不依赖 Qt。
 - 当前 Debug 全量测试通过。
-- Release 回归在阶段 17 统一执行。
+- Release 回归在阶段 18 统一执行。
 - ThreadSanitizer 当前环境不可用时，使用可控调度测试验证线程生命周期。
 
 实际结果（2026-07-30）：
@@ -548,7 +568,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - 多线程取消测试确认不再执行后续任务，并在返回前回收全部工作线程。
 - 原有无取消扫描重载和 CLI 行为保持兼容。
 - 阶段 11 新增 9 项测试；Debug CTest 共发现 82 项，0 失败，1 项 Skipped。
-- Release 回归继续延后到阶段 17。
+- Release 回归继续延后到阶段 18。
 - 详细结果见 [阶段11测试.md](../测试/阶段11测试.md)。
 
 ### 阶段 12：GUI 主窗口与状态机
@@ -681,7 +701,50 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - 测试只使用临时目录和运行时数据，没有增加整窗口像素截图比较。
 - 详细结果见 [阶段15测试.md](../测试/阶段15测试.md)。
 
-### 阶段 16：人工界面与真实目录验收
+### 阶段 16：结构化日志与双端展示
+
+目标：
+
+- 统一使用“时间：信息类型：所属层：信息内容”的结构化日志格式。
+- 信息类型使用 `DEBUG`、`INFO`、`WARN` 和 `ERROR`。
+- 核心日志类型和格式化保持标准 C++，不引入 Qt 或第三方日志依赖。
+- CLI 和从父终端启动的 GUI 在终端输出完整日志。
+- GUI 使用只读日志面板显示简化状态，并限制保留数量。
+- 日志只记录扫描阶段、数量、字节、耗时和错误类别，不记录完整敏感路径。
+- CLI 日志写入标准错误流，不污染原有扫描报告标准输出。
+- GUI 保持 `WIN32` 目标；从资源管理器启动时不额外创建控制台。
+
+重点覆盖：
+
+- 时间、类型、层级和内容字段格式稳定。
+- 换行等控制字符不会破坏单行日志。
+- 多线程终端写入不会互相穿插。
+- GUI 面板过滤 `DEBUG`，并只保留最近 500 条简化状态。
+- 开始、四阶段进度、取消、完成和失败日志只在对应边界产生。
+- GUI 和终端消费同一条结构化记录，但展示粒度不同。
+- 日志内容不包含输入目录或文件完整路径。
+- 既有 CLI 输出、GUI 状态和扫描结果无回归。
+
+本阶段不写日志文件，不增加日志导出、搜索、复杂过滤或第三方依赖。Release 构建、
+部署和许可验收继续延后到阶段 18。
+
+实际结果（2026-07-30）：
+
+- 新增独立 `batchguard_logging` 静态库；核心库不依赖日志输出设施。
+- 完整日志格式为带毫秒和时区的
+  `时间：DEBUG/INFO/WARN/ERROR：稳定层级：摘要，字段=值`。
+- CLI 把完整日志写入标准错误流；原扫描报告继续写标准输出。
+- GUI 从父终端启动时连接父控制台并输出完整日志，从资源管理器启动时不创建控制台。
+- GUI 新增只读“运行日志”面板，过滤 `DEBUG`、隐藏附加字段并最多保留最近 500 条。
+- 扫描开始、四阶段边界、取消、完成、部分失败和致命失败使用同一结构化记录分发。
+- 日志格式、单行清洗、并发写入、路径脱敏、GUI 过滤与双端路由已有自动化覆盖。
+- Debug CTest 共发现 88 项，0 失败，1 项 Skipped；GUI 与并发日志测试连续
+  20 轮通过。
+- `BatchGuard.exe --version` 实际输出完整日志，格式和退出码符合预期。
+- 没有创建或验证 Release；详细结果见
+  [阶段16测试.md](../测试/阶段16测试.md)。
+
+### 阶段 17：人工界面与真实目录验收
 
 验证场景：
 
@@ -702,7 +765,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 
 真实业务目录只用于本机人工验证，不把目录名、文件名、截图或扫描报告写入仓库。
 
-### 阶段 17：部署、文档与 v0.2.0 交付
+### 阶段 18：部署、文档与 v0.2.0 交付
 
 目标：
 
@@ -782,7 +845,7 @@ Qt 官方开源许可说明：
 | GUI 侵入核心 | Qt 类型限制在 `apps/gui` 和 GUI 测试 |
 | Qt 部署缺少插件或 DLL | 使用匹配版本 `windeployqt` 并在干净环境验证 |
 | UI 开发带入删除功能 | v0.2.0 保持只读，删除移动单独规划 |
-| 许可证遗漏 | 阶段 17 把许可证列为发布阻断项 |
+| 许可证遗漏 | 阶段 18 把许可证列为发布阻断项 |
 
 ## 14. 建议提交拆分
 

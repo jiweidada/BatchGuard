@@ -37,6 +37,7 @@ ScanController::ScanController(
       execution_{std::move(execution)},
       hashWorkerCount_{std::clamp(QThread::idealThreadCount(), 1, 64)} {
     Q_ASSERT(execution_);
+    qRegisterMetaType<LogRecord>("batchguard::LogRecord");
     connect(
         execution_.get(),
         &ScanExecution::completed,
@@ -161,8 +162,16 @@ void ScanController::startScan() {
     elapsedMilliseconds_ = 0;
     scanTimer_.start();
     report_.reset();
+    lastLoggedProgressStage_.reset();
     emit reportChanged({});
     setState(ScanState::Scanning);
+    publishLog(makeLogRecord(
+        LogLevel::Info,
+        LogLayer::GuiController,
+        "开始扫描",
+        {
+            {"scanId", std::to_string(currentScanId_)},
+            {"hashWorkers", std::to_string(hashWorkerCount_)}}));
     execution_->start({
         currentScanId_,
         directoryPath_,
@@ -174,6 +183,11 @@ void ScanController::cancelScan() {
         return;
     }
     setState(ScanState::Cancelling);
+    publishLog(makeLogRecord(
+        LogLevel::Info,
+        LogLayer::GuiController,
+        "请求安全取消",
+        {{"scanId", std::to_string(currentScanId_)}}));
     execution_->requestCancel();
 }
 
@@ -185,6 +199,11 @@ void ScanController::handleCompleted(
     }
     if (state_ == ScanState::Cancelling) {
         // 用户取消已经成为当前意图，迟到的完成事件不得覆盖取消终态。
+        publishLog(makeLogRecord(
+            LogLevel::Debug,
+            LogLayer::GuiExecution,
+            "完成事件晚于取消请求，按取消处理",
+            {{"scanId", std::to_string(scanId)}}));
         handleCancelled(scanId);
         return;
     }
@@ -192,6 +211,21 @@ void ScanController::handleCompleted(
     elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_.clear();
     setState(ScanState::Completed);
+    publishLog(makeLogRecord(
+        LogLevel::Debug,
+        LogLayer::GuiExecution,
+        "后台扫描线程已回收",
+        {{"scanId", std::to_string(scanId)}}));
+    publishLog(makeLogRecord(
+        report_->isComplete() ? LogLevel::Info : LogLevel::Warning,
+        LogLayer::GuiController,
+        report_->isComplete() ? "扫描完成" : "扫描完成，存在部分失败",
+        {
+            {"scanId", std::to_string(scanId)},
+            {"discoveredFiles", std::to_string(report_->discoveredFileCount)},
+            {"duplicateGroups", std::to_string(report_->duplicateGroups.size())},
+            {"failures", std::to_string(report_->failures.size())},
+            {"elapsedMs", std::to_string(elapsedMilliseconds_)}}));
     emit reportChanged(report_);
 }
 
@@ -203,6 +237,18 @@ void ScanController::handleCancelled(quint64 scanId) {
     elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_.clear();
     setState(ScanState::Cancelled);
+    publishLog(makeLogRecord(
+        LogLevel::Debug,
+        LogLayer::GuiExecution,
+        "后台扫描线程已回收",
+        {{"scanId", std::to_string(scanId)}}));
+    publishLog(makeLogRecord(
+        LogLevel::Warning,
+        LogLayer::GuiController,
+        "扫描已取消",
+        {
+            {"scanId", std::to_string(scanId)},
+            {"elapsedMs", std::to_string(elapsedMilliseconds_)}}));
 }
 
 void ScanController::handleFailed(quint64 scanId, const QString& message) {
@@ -215,6 +261,18 @@ void ScanController::handleFailed(quint64 scanId, const QString& message) {
         ? QStringLiteral("扫描遇到未预期错误。")
         : message;
     setState(ScanState::Failed);
+    publishLog(makeLogRecord(
+        LogLevel::Debug,
+        LogLayer::GuiExecution,
+        "后台扫描线程已回收",
+        {{"scanId", std::to_string(scanId)}}));
+    publishLog(makeLogRecord(
+        LogLevel::Error,
+        LogLayer::GuiController,
+        "扫描失败",
+        {
+            {"scanId", std::to_string(scanId)},
+            {"elapsedMs", std::to_string(elapsedMilliseconds_)}}));
 }
 
 void ScanController::handleProgress(
@@ -222,6 +280,13 @@ void ScanController::handleProgress(
     const ScanProgress& progress) {
     if (!acceptsEvent(scanId) || state_ != ScanState::Scanning) {
         return;
+    }
+    const bool isStageChange =
+        !lastLoggedProgressStage_.has_value() ||
+        *lastLoggedProgressStage_ != progress.stage;
+    if (isStageChange || progress.isStageComplete) {
+        publishLog(makeProgressLogRecord(progress));
+        lastLoggedProgressStage_ = progress.stage;
     }
     emit scanProgressChanged(progress);
 }
@@ -239,6 +304,10 @@ void ScanController::setState(ScanState state) {
     }
     state_ = state;
     emit viewStateChanged();
+}
+
+void ScanController::publishLog(LogRecord record) {
+    emit logRecordCreated(record);
 }
 
 bool ScanController::acceptsEvent(quint64 scanId) const noexcept {

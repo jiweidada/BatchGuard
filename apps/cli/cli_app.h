@@ -1,6 +1,7 @@
 #pragma once
 
 #include "batchguard/core/scan_progress.h"
+#include "batchguard/logging/logging.h"
 
 #include <iosfwd>
 #include <string>
@@ -22,6 +23,7 @@ enum class ExitCode {
     const std::vector<std::wstring>& arguments,
     std::wostream& output,
     std::wostream& error,
-    const ScanProgressCallback& progressCallback = {});
+    const ScanProgressCallback& progressCallback = {},
+    const LogCallback& logCallback = {});
 
 }

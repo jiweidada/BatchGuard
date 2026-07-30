@@ -2,6 +2,8 @@
 
 #include "scan_execution.h"
 
+#include "batchguard/logging/logging.h"
+
 #include <QMainWindow>
 
 #include <memory>
@@ -18,6 +20,7 @@ namespace batchguard::gui {
 class DuplicateGroupModel;
 class DuplicatePathModel;
 class FailureModel;
+class GuiLogModel;
 class ScanController;
 
 // 提供目录配置、扫描操作和状态反馈，并把用户命令转发给控制器。
@@ -29,6 +32,10 @@ public:
     explicit MainWindow(
         std::unique_ptr<ScanExecution> execution,
         QWidget* parent = nullptr);
+    MainWindow(
+        std::unique_ptr<ScanExecution> execution,
+        LogCallback terminalLogCallback,
+        QWidget* parent = nullptr);
     ~MainWindow() override;
 
 protected:
@@ -38,6 +45,7 @@ private:
     void chooseDirectory();
     void renderState();
     void renderProgress(const batchguard::ScanProgress& progress);
+    void handleLogRecord(const batchguard::LogRecord& record);
     void showReport(const SharedScanReport& report);
     void selectDuplicateGroup(int row);
     void updatePathActions();
@@ -51,6 +59,8 @@ private:
     std::unique_ptr<DuplicateGroupModel> duplicateGroupModel_;
     std::unique_ptr<DuplicatePathModel> duplicatePathModel_;
     std::unique_ptr<FailureModel> failureModel_;
+    std::unique_ptr<GuiLogModel> guiLogModel_;
+    LogCallback terminalLogCallback_;
     bool isClosePending_{};
 };
 

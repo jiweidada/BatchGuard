@@ -12,6 +12,7 @@ add_executable(batchguard_tests
     unit/file_hash_scheduler_test.cpp
     unit/file_discovery_test.cpp
     unit/input_validator_test.cpp
+    unit/logging_test.cpp
 )
 
 target_include_directories(batchguard_tests

@@ -9,6 +9,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -75,6 +76,48 @@ TEST(CliAppTest, ExistingDirectoryReturnsZero) {
     EXPECT_NE(output.str().find(L"重复组数：0"), std::wstring::npos);
     EXPECT_NE(output.str().find(L"未发现重复文件"), std::wstring::npos);
     EXPECT_TRUE(error.str().empty());
+}
+
+TEST(CliAppTest, EmitsStructuredLogsWithoutSensitiveDirectoryPath) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    const std::filesystem::path sensitiveDirectory =
+        temporaryDirectory.path() / "SensitivePathToken";
+    ASSERT_TRUE(std::filesystem::create_directory(sensitiveDirectory));
+    std::wostringstream output;
+    std::wostringstream error;
+    std::vector<LogRecord> records;
+
+    const int exitCode = runCli(
+        {sensitiveDirectory.wstring()},
+        output,
+        error,
+        {},
+        [&records](const LogRecord& record) {
+            records.push_back(record);
+        });
+
+    EXPECT_EQ(exitCode, 0);
+    EXPECT_TRUE(error.str().empty());
+    ASSERT_FALSE(records.empty());
+    EXPECT_TRUE(std::any_of(
+        records.begin(),
+        records.end(),
+        [](const LogRecord& record) {
+            return record.layer == LogLayer::Cli &&
+                record.summary == "扫描完成";
+        }));
+    EXPECT_TRUE(std::any_of(
+        records.begin(),
+        records.end(),
+        [](const LogRecord& record) {
+            return record.layer == LogLayer::CoreGrouping &&
+                record.summary == "重复分组完成";
+        }));
+    for (const LogRecord& record : records) {
+        EXPECT_EQ(
+            formatLogRecord(record).find("SensitivePathToken"),
+            std::string::npos);
+    }
 }
 
 TEST(CliAppTest, ExistingDirectoryReportsDiscoveredFileCount) {
