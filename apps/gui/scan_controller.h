@@ -3,6 +3,7 @@
 #include "scan_execution.h"
 #include "scan_state.h"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
@@ -31,6 +32,7 @@ public:
     [[nodiscard]] bool canStart() const noexcept;
     [[nodiscard]] bool canCancel() const noexcept;
     [[nodiscard]] quint64 currentScanId() const noexcept;
+    [[nodiscard]] qint64 elapsedMilliseconds() const noexcept;
     [[nodiscard]] SharedScanReport report() const;
 
 public slots:
@@ -67,6 +69,8 @@ private:
     QString validationMessage_;
     QString failureMessage_;
     quint64 currentScanId_{};
+    QElapsedTimer scanTimer_;
+    qint64 elapsedMilliseconds_{};
     SharedScanReport report_;
 };
 

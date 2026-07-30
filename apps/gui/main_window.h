@@ -15,6 +15,9 @@ QT_END_NAMESPACE
 
 namespace batchguard::gui {
 
+class DuplicateGroupModel;
+class DuplicatePathModel;
+class FailureModel;
 class ScanController;
 
 // 提供目录配置、扫描操作和状态反馈，并把用户命令转发给控制器。
@@ -35,11 +38,19 @@ private:
     void chooseDirectory();
     void renderState();
     void renderProgress(const batchguard::ScanProgress& progress);
+    void showReport(const SharedScanReport& report);
+    void selectDuplicateGroup(int row);
+    void updatePathActions();
+    void copySelectedPath();
+    void openSelectedPathDirectory();
     [[nodiscard]] static std::unique_ptr<ScanExecution>
         createDefaultExecution();
 
     std::unique_ptr<Ui::MainWindow> ui_;
     std::unique_ptr<ScanController> controller_;
+    std::unique_ptr<DuplicateGroupModel> duplicateGroupModel_;
+    std::unique_ptr<DuplicatePathModel> duplicatePathModel_;
+    std::unique_ptr<FailureModel> failureModel_;
     bool isClosePending_{};
 };
 

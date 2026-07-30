@@ -7,13 +7,13 @@
     <x>0</x>
     <y>0</y>
     <width>960</width>
-    <height>640</height>
+    <height>760</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>760</width>
-    <height>520</height>
+    <height>600</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -202,17 +202,238 @@
      </widget>
     </item>
     <item>
-     <spacer name="verticalSpacer">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
+     <widget class="QGroupBox" name="resultGroup">
+      <property name="title">
+       <string>扫描结果</string>
       </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>20</width>
-        <height>40</height>
-       </size>
-      </property>
-     </spacer>
+      <layout class="QVBoxLayout" name="resultLayout">
+       <item>
+        <widget class="QLabel" name="conclusionLabel">
+         <property name="font">
+          <font>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="metricsLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="scannedCaptionLabel">
+           <property name="text"><string>扫描文件</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="scannedValueLabel">
+           <property name="text"><string>0</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="successfulCaptionLabel">
+           <property name="text"><string>成功处理</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="successfulValueLabel">
+           <property name="text"><string>0</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="groupCaptionLabel">
+           <property name="text"><string>重复组</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="groupValueLabel">
+           <property name="text"><string>0</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLabel" name="redundantCaptionLabel">
+           <property name="text"><string>冗余副本</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLabel" name="redundantValueLabel">
+           <property name="text"><string>0</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="0" column="4">
+          <widget class="QLabel" name="reclaimableCaptionLabel">
+           <property name="toolTip">
+            <string>假设每组只保留一个文件的逻辑大小估算，未考虑硬链接、稀疏文件和文件系统压缩。</string>
+           </property>
+           <property name="text"><string>理论可节省</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="4">
+          <widget class="QLabel" name="reclaimableValueLabel">
+           <property name="toolTip">
+            <string>只读估算，不代表已经释放或一定能够释放的物理空间。</string>
+           </property>
+           <property name="text"><string>0 B</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="0" column="5">
+          <widget class="QLabel" name="failureCaptionLabel">
+           <property name="text"><string>处理失败</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item row="1" column="5">
+          <widget class="QLabel" name="failureValueLabel">
+           <property name="text"><string>0</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="detailsLabel">
+         <property name="text"><string/></property>
+         <property name="wordWrap"><bool>true</bool></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTabWidget" name="resultTabs">
+         <property name="currentIndex"><number>0</number></property>
+         <widget class="QWidget" name="duplicatesTab">
+          <attribute name="title"><string>重复内容（0）</string></attribute>
+          <layout class="QVBoxLayout" name="duplicatesLayout">
+           <item>
+            <widget class="QLabel" name="duplicateEmptyLabel">
+             <property name="text"><string>未发现重复内容。</string></property>
+             <property name="alignment"><set>Qt::AlignCenter</set></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="duplicateTablesWidget" native="true">
+             <layout class="QVBoxLayout" name="duplicateTablesLayout">
+              <property name="leftMargin"><number>0</number></property>
+              <property name="topMargin"><number>0</number></property>
+              <property name="rightMargin"><number>0</number></property>
+              <property name="bottomMargin"><number>0</number></property>
+              <item>
+               <widget class="QTableView" name="duplicateGroupTable">
+                <property name="minimumSize">
+                 <size><width>0</width><height>150</height></size>
+                </property>
+                <property name="editTriggers">
+                 <set>QAbstractItemView::NoEditTriggers</set>
+                </property>
+                <property name="alternatingRowColors"><bool>true</bool></property>
+                <property name="selectionMode">
+                 <enum>QAbstractItemView::SingleSelection</enum>
+                </property>
+                <property name="selectionBehavior">
+                 <enum>QAbstractItemView::SelectRows</enum>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="pathDetailsLabel">
+                <property name="text">
+                 <string>所选重复组的完整路径</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QTableView" name="duplicatePathTable">
+                <property name="minimumSize">
+                 <size><width>0</width><height>110</height></size>
+                </property>
+                <property name="editTriggers">
+                 <set>QAbstractItemView::NoEditTriggers</set>
+                </property>
+                <property name="alternatingRowColors"><bool>true</bool></property>
+                <property name="selectionMode">
+                 <enum>QAbstractItemView::SingleSelection</enum>
+                </property>
+                <property name="selectionBehavior">
+                 <enum>QAbstractItemView::SelectRows</enum>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="pathActionsLayout">
+                <item>
+                 <widget class="QPushButton" name="copyPathButton">
+                  <property name="text"><string>复制完整路径</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="openDirectoryButton">
+                  <property name="text"><string>打开所在目录</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="pathActionSpacer">
+                  <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                  <property name="sizeHint" stdset="0">
+                   <size><width>40</width><height>20</height></size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="failuresTab">
+          <attribute name="title"><string>处理失败（0）</string></attribute>
+          <layout class="QVBoxLayout" name="failuresLayout">
+           <item>
+            <widget class="QLabel" name="failureSummaryLabel">
+             <property name="text">
+              <string>所有已发现文件均完成处理。</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="failureEmptyLabel">
+             <property name="text"><string>没有处理失败记录。</string></property>
+             <property name="alignment"><set>Qt::AlignCenter</set></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTableView" name="failureTable">
+             <property name="minimumSize">
+              <size><width>0</width><height>220</height></size>
+             </property>
+             <property name="editTriggers">
+              <set>QAbstractItemView::NoEditTriggers</set>
+             </property>
+             <property name="alternatingRowColors"><bool>true</bool></property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </item>
    </layout>
   </widget>

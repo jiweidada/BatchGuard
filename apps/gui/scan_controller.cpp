@@ -91,7 +91,9 @@ QString ScanController::statusMessage() const {
     case ScanState::Cancelling:
         return QStringLiteral("正在安全取消…");
     case ScanState::Completed:
-        return QStringLiteral("扫描完成");
+        return report_ && !report_->isComplete()
+            ? QStringLiteral("扫描完成，存在部分失败")
+            : QStringLiteral("扫描完成");
     case ScanState::Cancelled:
         return QStringLiteral("扫描已取消，可以重新开始");
     case ScanState::Failed:
@@ -118,6 +120,10 @@ bool ScanController::canCancel() const noexcept {
 
 quint64 ScanController::currentScanId() const noexcept {
     return currentScanId_;
+}
+
+qint64 ScanController::elapsedMilliseconds() const noexcept {
+    return elapsedMilliseconds_;
 }
 
 SharedScanReport ScanController::report() const {
@@ -152,6 +158,8 @@ void ScanController::startScan() {
 
     ++currentScanId_;
     failureMessage_.clear();
+    elapsedMilliseconds_ = 0;
+    scanTimer_.start();
     report_.reset();
     emit reportChanged({});
     setState(ScanState::Scanning);
@@ -176,6 +184,7 @@ void ScanController::handleCompleted(
         return;
     }
     report_ = report;
+    elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_.clear();
     setState(ScanState::Completed);
     emit reportChanged(report_);
@@ -186,6 +195,7 @@ void ScanController::handleCancelled(quint64 scanId) {
         return;
     }
     report_.reset();
+    elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_.clear();
     setState(ScanState::Cancelled);
 }
@@ -195,6 +205,7 @@ void ScanController::handleFailed(quint64 scanId, const QString& message) {
         return;
     }
     report_.reset();
+    elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_ = message.isEmpty()
         ? QStringLiteral("扫描遇到未预期错误。")
         : message;

@@ -86,9 +86,17 @@ if(BATCHGUARD_BUILD_GUI)
     find_package(Qt5 5.14 REQUIRED COMPONENTS ${batchguardQtComponents})
 
     add_library(batchguard_gui_support STATIC
+        apps/gui/duplicate_group_model.cpp
+        apps/gui/duplicate_group_model.h
+        apps/gui/duplicate_path_model.cpp
+        apps/gui/duplicate_path_model.h
+        apps/gui/failure_model.cpp
+        apps/gui/failure_model.h
         apps/gui/main_window.cpp
         apps/gui/main_window.h
         apps/gui/main_window.ui
+        apps/gui/result_summary.cpp
+        apps/gui/result_summary.h
         apps/gui/scan_controller.cpp
         apps/gui/scan_controller.h
         apps/gui/scan_execution.h

@@ -4,10 +4,14 @@ BatchGuard 0.1.0 是一个使用 C++20 开发的 Windows 本地重复文件检�
 单目录输入验证、递归普通文件发现、并发 SHA-256 内容指纹、重复分组、中文扫描
 报告和控制台动态进度。程序只读取输入目录，不删除、移动或修改文件。
 
+当前 v0.2.0 Debug 开发版还提供 Qt Widgets GUI：可选择目录、设置哈希线程数、
+在后台扫描和安全取消，并查看结论摘要、重复组、完整路径和处理失败详情。
+
 ## 项目结构
 
 ```text
 apps/cli/                  命令行入口
+apps/gui/                  Qt 主窗口、控制器、后台执行和结果模型
 include/batchguard/core/   核心库公共头文件
 src/core/                  核心库实现
 tests/                     GoogleTest 测试
@@ -16,6 +20,7 @@ docs/                      设计、学习和测试文档
 ```
 
 `batchguard_cli` 链接 `batchguard_core`，最终程序名为 `BatchGuard.exe`。
+启用 GUI 后还会生成 `BatchGuardGui.exe`。
 
 ## 环境要求
 
@@ -55,6 +60,17 @@ ctest --test-dir cmake-build-debug --output-on-failure
 
 ## 使用方式
 
+GUI 直接运行：
+
+```powershell
+.\cmake-build-debug\BatchGuardGui.exe
+```
+
+选择有效目录后即可开始扫描。结果中的“理论可节省”是假设每个重复组只保留一个
+文件的逻辑大小估算，未考虑硬链接、稀疏文件和文件系统压缩；GUI 不会执行清理。
+
+CLI 使用方式：
+
 ```text
 BatchGuard <目录路径>
 BatchGuard --hash-workers <1-64> <目录路径>
@@ -65,7 +81,7 @@ BatchGuard --version
 包含空格的路径需要使用双引号，例如：
 
 ```powershell
-.\build\debug\BatchGuard.exe "E:\测试数据\待整理目录"
+.\cmake-build-debug\BatchGuard.exe "E:\测试数据\待整理目录"
 ```
 
 程序会验证输入路径、递归发现普通文件、读取文件大小，并只对至少包含两个文件的
@@ -144,6 +160,8 @@ ctest --test-dir cmake-build-debug --output-on-failure
 - `docs/测试/阶段7测试.md`：阶段 7 扫描进度事件和控制台动态显示。
 - `docs/测试/阶段8测试.md`：阶段 8 有界文件级并发和线程安全进度汇聚。
 - `docs/测试/阶段9测试.md`：阶段 9 最终交付验收。
+- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段14测试.md`：Qt 构建、取消、
+  GUI 状态、后台扫描和结果展示。
 - `docs/学习/`：CMake、GoogleTest 和 Git 学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。

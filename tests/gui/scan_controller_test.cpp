@@ -1,20 +1,30 @@
+#include "duplicate_group_model.h"
+#include "duplicate_path_model.h"
+#include "failure_model.h"
 #include "main_window.h"
+#include "result_summary.h"
 #include "scan_controller.h"
 #include "scan_execution.h"
 #include "threaded_scan_execution.h"
 
 #include <QFile>
+#include <QGroupBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSpinBox>
+#include <QTableView>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
 #include <QtTest>
 
 #include <algorithm>
+#include <filesystem>
+#include <limits>
 #include <memory>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -33,8 +43,10 @@ public:
         ++cancelRequestCount;
     }
 
-    void finishCompleted(quint64 scanId) {
-        emit completed(scanId, std::make_shared<ScanReport>());
+    void finishCompleted(
+        quint64 scanId,
+        SharedScanReport report = std::make_shared<ScanReport>()) {
+        emit completed(scanId, report);
     }
 
     void finishCancelled(quint64 scanId) {
@@ -74,6 +86,11 @@ private slots:
     void realBackgroundScanCompletesAndReportsProgress();
     void realBackgroundScanCanBeCancelled();
     void closingWindowCancelsAndReclaimsBackgroundThread();
+    void resultSummaryUsesDocumentedStatistics();
+    void resultSummarySaturatesLargeByteTotals();
+    void resultModelsExposeStableRowsAndRawSortValues();
+    void resultModelsHandleManyRowsWithoutCopyingReports();
+    void mainWindowShowsCompleteReportAndHidesCancelledResults();
 };
 
 void ScanControllerTest::invalidDirectoryCannotStart() {
@@ -307,6 +324,171 @@ void ScanControllerTest::closingWindowCancelsAndReclaimsBackgroundThread() {
 
     QTRY_VERIFY_WITH_TIMEOUT(!window.isVisible(), 10000);
     QVERIFY(!executionPointer->isRunning());
+}
+
+void ScanControllerTest::resultSummaryUsesDocumentedStatistics() {
+    ScanReport report;
+    report.discoveredFileCount = 8U;
+    report.successfulFileCount = 7U;
+    report.totalLogicalBytes = 1000U;
+    report.candidateFileCount = 5U;
+    report.candidateBytes = 850U;
+    report.hashedFileCount = 4U;
+    report.duplicateGroups = {
+        {100U, "first", {"a", "b", "c"}},
+        {50U, "second", {"d", "e"}}};
+    report.failures.push_back({
+        "failed",
+        FailureStage::Metadata,
+        std::make_error_code(std::errc::permission_denied)});
+
+    const ResultSummary summary = calculateResultSummary(report);
+
+    QCOMPARE(summary.scannedFileCount, std::size_t{8U});
+    QCOMPARE(summary.successfulFileCount, std::size_t{7U});
+    QCOMPARE(summary.duplicateGroupCount, std::size_t{2U});
+    QCOMPARE(summary.duplicateFileCount, std::size_t{5U});
+    QCOMPARE(summary.redundantCopyCount, std::size_t{3U});
+    QCOMPARE(summary.duplicateLogicalBytes, std::uintmax_t{400U});
+    QCOMPARE(summary.reclaimableBytes, std::uintmax_t{250U});
+    QCOMPARE(summary.failureCount, std::size_t{1U});
+    QVERIFY(summary.conclusion.contains(QStringLiteral("理论可节省")));
+}
+
+void ScanControllerTest::resultSummarySaturatesLargeByteTotals() {
+    ScanReport report;
+    const std::uintmax_t maximum =
+        (std::numeric_limits<std::uintmax_t>::max)();
+    report.duplicateGroups = {
+        {maximum, "large", {"a", "b", "c"}}};
+
+    const ResultSummary summary = calculateResultSummary(report);
+
+    QCOMPARE(summary.duplicateLogicalBytes, maximum);
+    QCOMPARE(summary.reclaimableBytes, maximum);
+}
+
+void ScanControllerTest::resultModelsExposeStableRowsAndRawSortValues() {
+    auto report = std::make_shared<ScanReport>();
+    report->duplicateGroups = {
+        {100U, "first", {"a", "b"}},
+        {70U, "second", {"c", "d", "e"}}};
+    report->failures = {
+        {
+            "missing",
+            FailureStage::Discovery,
+            std::make_error_code(std::errc::no_such_file_or_directory)},
+        {
+            "locked",
+            FailureStage::Hashing,
+            std::make_error_code(std::errc::permission_denied)}};
+
+    DuplicateGroupModel groupModel;
+    groupModel.setReport(report);
+    QCOMPARE(groupModel.rowCount(), 2);
+    const QModelIndex firstSavingsIndex = groupModel.index(0, 4);
+    QCOMPARE(
+        firstSavingsIndex.data(DuplicateGroupModel::ReportGroupIndexRole)
+            .toULongLong(),
+        qulonglong{1U});
+    QCOMPARE(
+        firstSavingsIndex.data(DuplicateGroupModel::RawValueRole)
+            .toULongLong(),
+        qulonglong{140U});
+    groupModel.sort(2, Qt::AscendingOrder);
+    QCOMPARE(groupModel.reportGroupIndexForRow(0), std::size_t{1U});
+
+    DuplicatePathModel pathModel;
+    pathModel.setReport(report);
+    pathModel.setGroupIndex(1U);
+    QCOMPARE(pathModel.rowCount(), 3);
+    QCOMPARE(pathModel.pathAt(0), QStringLiteral("c"));
+
+    FailureModel failureModel;
+    failureModel.setReport(report);
+    QCOMPARE(failureModel.rowCount(), 2);
+    QVERIFY(failureModel.stageSummary().contains(
+        QStringLiteral("文件发现 1")));
+    QVERIFY(failureModel.stageSummary().contains(
+        QStringLiteral("内容指纹 1")));
+}
+
+void ScanControllerTest::resultModelsHandleManyRowsWithoutCopyingReports() {
+    auto report = std::make_shared<ScanReport>();
+    constexpr std::size_t kGroupCount = 5000U;
+    report->duplicateGroups.reserve(kGroupCount);
+    for (std::size_t index = 0; index < kGroupCount; ++index) {
+        report->duplicateGroups.push_back({
+            static_cast<std::uintmax_t>(index),
+            "hash",
+            {
+                std::filesystem::path{"first"},
+                std::filesystem::path{"second"}}});
+    }
+
+    DuplicateGroupModel groupModel;
+    groupModel.setReport(report);
+    QCOMPARE(groupModel.rowCount(), static_cast<int>(kGroupCount));
+    QCOMPARE(
+        groupModel.reportGroupIndexForRow(0),
+        kGroupCount - 1U);
+
+    DuplicatePathModel pathModel;
+    pathModel.setReport(report);
+    pathModel.setGroupIndex(kGroupCount - 1U);
+    QCOMPARE(pathModel.rowCount(), 2);
+}
+
+void ScanControllerTest::mainWindowShowsCompleteReportAndHidesCancelledResults() {
+    QTemporaryDir directory;
+    auto execution = std::make_unique<FakeScanExecution>();
+    FakeScanExecution* executionPointer = execution.get();
+    MainWindow window{std::move(execution)};
+    auto* directoryInput =
+        window.findChild<QLineEdit*>(QStringLiteral("directoryLineEdit"));
+    auto* startButton =
+        window.findChild<QPushButton*>(QStringLiteral("startButton"));
+    auto* resultGroup =
+        window.findChild<QGroupBox*>(QStringLiteral("resultGroup"));
+    auto* groupTable =
+        window.findChild<QTableView*>(QStringLiteral("duplicateGroupTable"));
+    auto* conclusion =
+        window.findChild<QLabel*>(QStringLiteral("conclusionLabel"));
+    QVERIFY(directoryInput);
+    QVERIFY(startButton);
+    QVERIFY(resultGroup);
+    QVERIFY(groupTable);
+    QVERIFY(conclusion);
+
+    directoryInput->setText(directory.path());
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    auto report = std::make_shared<ScanReport>();
+    report->discoveredFileCount = 2U;
+    report->successfulFileCount = 2U;
+    report->duplicateGroups = {
+        {4U, "same", {"first", "second"}}};
+    executionPointer->finishCompleted(1U, report);
+
+    QVERIFY(!resultGroup->isHidden());
+    QCOMPARE(groupTable->model()->rowCount(), 1);
+    QVERIFY(conclusion->text().contains(QStringLiteral("1 组重复内容")));
+
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    executionPointer->finishCancelled(2U);
+    QVERIFY(!resultGroup->isVisible());
+
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    executionPointer->finishCompleted(
+        3U,
+        std::make_shared<ScanReport>());
+    auto* duplicateEmpty = window.findChild<QLabel*>(
+        QStringLiteral("duplicateEmptyLabel"));
+    auto* failureEmpty = window.findChild<QLabel*>(
+        QStringLiteral("failureEmptyLabel"));
+    QVERIFY(duplicateEmpty);
+    QVERIFY(failureEmpty);
+    QVERIFY(!duplicateEmpty->isHidden());
+    QVERIFY(!failureEmpty->isHidden());
 }
 
 }

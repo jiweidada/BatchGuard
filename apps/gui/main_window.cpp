@@ -1,15 +1,28 @@
 #include "main_window.h"
 
+#include "duplicate_group_model.h"
+#include "duplicate_path_model.h"
+#include "failure_model.h"
+#include "result_summary.h"
 #include "scan_controller.h"
 #include "threaded_scan_execution.h"
 #include "ui_main_window.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QTimer>
+#include <QUrl>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace batchguard::gui {
@@ -62,9 +75,20 @@ MainWindow::MainWindow(
     : QMainWindow{parent},
       ui_{std::make_unique<Ui::MainWindow>()},
       controller_{std::make_unique<ScanController>(
-          std::move(execution))} {
+          std::move(execution))},
+      duplicateGroupModel_{std::make_unique<DuplicateGroupModel>()},
+      duplicatePathModel_{std::make_unique<DuplicatePathModel>()},
+      failureModel_{std::make_unique<FailureModel>()} {
     ui_->setupUi(this);
     ui_->hashWorkerSpinBox->setValue(controller_->hashWorkerCount());
+    ui_->duplicateGroupTable->setModel(duplicateGroupModel_.get());
+    ui_->duplicatePathTable->setModel(duplicatePathModel_.get());
+    ui_->failureTable->setModel(failureModel_.get());
+    ui_->duplicateGroupTable->horizontalHeader()->setStretchLastSection(true);
+    ui_->duplicatePathTable->horizontalHeader()->setStretchLastSection(true);
+    ui_->failureTable->horizontalHeader()->setStretchLastSection(true);
+    ui_->duplicateGroupTable->setSortingEnabled(true);
+    ui_->duplicateGroupTable->sortByColumn(4, Qt::DescendingOrder);
 
     connect(
         ui_->directoryLineEdit,
@@ -101,8 +125,36 @@ MainWindow::MainWindow(
         &ScanController::scanProgressChanged,
         this,
         &MainWindow::renderProgress);
+    connect(
+        controller_.get(),
+        &ScanController::reportChanged,
+        this,
+        &MainWindow::showReport);
+    connect(
+        ui_->duplicateGroupTable->selectionModel(),
+        &QItemSelectionModel::currentRowChanged,
+        this,
+        [this](const QModelIndex& current) {
+            selectDuplicateGroup(current.row());
+        });
+    connect(
+        ui_->duplicatePathTable->selectionModel(),
+        &QItemSelectionModel::selectionChanged,
+        this,
+        &MainWindow::updatePathActions);
+    connect(
+        ui_->copyPathButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::copySelectedPath);
+    connect(
+        ui_->openDirectoryButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openSelectedPathDirectory);
 
     renderState();
+    showReport({});
 }
 
 MainWindow::~MainWindow() = default;
@@ -182,6 +234,114 @@ void MainWindow::renderProgress(const ScanProgress& progress) {
             QStringLiteral("%1 / %2 个文件")
                 .arg(progress.completedItems)
                 .arg(progress.totalItems));
+    }
+}
+
+void MainWindow::showReport(const SharedScanReport& report) {
+    duplicateGroupModel_->setReport(report);
+    duplicatePathModel_->setReport(report);
+    failureModel_->setReport(report);
+
+    const bool hasReport = static_cast<bool>(report);
+    ui_->resultPlaceholderLabel->setVisible(!hasReport);
+    ui_->resultGroup->setVisible(hasReport);
+    if (!hasReport) {
+        return;
+    }
+
+    const ResultSummary summary = calculateResultSummary(*report);
+    ui_->conclusionLabel->setText(summary.conclusion);
+    ui_->scannedValueLabel->setText(
+        QString::number(summary.scannedFileCount));
+    ui_->successfulValueLabel->setText(
+        QString::number(summary.successfulFileCount));
+    ui_->groupValueLabel->setText(
+        QString::number(summary.duplicateGroupCount));
+    ui_->redundantValueLabel->setText(
+        QString::number(summary.redundantCopyCount));
+    ui_->reclaimableValueLabel->setText(
+        formatByteSize(summary.reclaimableBytes));
+    ui_->failureValueLabel->setText(
+        QString::number(summary.failureCount));
+    ui_->detailsLabel->setText(
+        QStringLiteral(
+            "逻辑大小 %1 · 候选 %2 个 / %3 · 完成指纹 %4 个 · 用时 %5 秒")
+            .arg(formatByteSize(summary.totalLogicalBytes))
+            .arg(summary.candidateFileCount)
+            .arg(formatByteSize(summary.candidateBytes))
+            .arg(summary.hashedFileCount)
+            .arg(
+                static_cast<double>(controller_->elapsedMilliseconds()) /
+                    1000.0,
+                0,
+                'f',
+                2));
+    ui_->resultTabs->setTabText(
+        0,
+        QStringLiteral("重复内容（%1）")
+            .arg(summary.duplicateGroupCount));
+    ui_->resultTabs->setTabText(
+        1,
+        QStringLiteral("处理失败（%1）")
+            .arg(summary.failureCount));
+
+    const bool hasDuplicates = duplicateGroupModel_->rowCount() > 0;
+    ui_->duplicateEmptyLabel->setVisible(!hasDuplicates);
+    ui_->duplicateTablesWidget->setVisible(hasDuplicates);
+    if (hasDuplicates) {
+        ui_->duplicateGroupTable->selectRow(0);
+        selectDuplicateGroup(0);
+    } else {
+        duplicatePathModel_->setGroupIndex(std::nullopt);
+    }
+
+    const bool hasFailures = failureModel_->rowCount() > 0;
+    ui_->failureEmptyLabel->setVisible(!hasFailures);
+    ui_->failureTable->setVisible(hasFailures);
+    ui_->failureSummaryLabel->setText(
+        hasFailures
+            ? failureModel_->stageSummary()
+            : QStringLiteral("所有已发现文件均完成处理。"));
+    updatePathActions();
+}
+
+void MainWindow::selectDuplicateGroup(int row) {
+    const std::size_t groupIndex =
+        duplicateGroupModel_->reportGroupIndexForRow(row);
+    if (groupIndex == (std::numeric_limits<std::size_t>::max)()) {
+        duplicatePathModel_->setGroupIndex(std::nullopt);
+    } else {
+        duplicatePathModel_->setGroupIndex(groupIndex);
+        if (duplicatePathModel_->rowCount() > 0) {
+            ui_->duplicatePathTable->selectRow(0);
+        }
+    }
+    updatePathActions();
+}
+
+void MainWindow::updatePathActions() {
+    const bool hasSelection =
+        ui_->duplicatePathTable->selectionModel()->hasSelection();
+    ui_->copyPathButton->setEnabled(hasSelection);
+    ui_->openDirectoryButton->setEnabled(hasSelection);
+}
+
+void MainWindow::copySelectedPath() {
+    const QModelIndex currentIndex =
+        ui_->duplicatePathTable->currentIndex();
+    const QString path = duplicatePathModel_->pathAt(currentIndex.row());
+    if (!path.isEmpty()) {
+        QApplication::clipboard()->setText(path);
+    }
+}
+
+void MainWindow::openSelectedPathDirectory() {
+    const QModelIndex currentIndex =
+        ui_->duplicatePathTable->currentIndex();
+    const QString path = duplicatePathModel_->pathAt(currentIndex.row());
+    if (!path.isEmpty()) {
+        QDesktopServices::openUrl(
+            QUrl::fromLocalFile(QFileInfo{path}.absolutePath()));
     }
 }
 
