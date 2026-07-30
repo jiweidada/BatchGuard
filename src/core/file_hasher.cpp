@@ -132,12 +132,23 @@ std::string toLowerHex(const std::vector<unsigned char>& digest) {
 }
 
 FileHashResult calculateFileSha256(const std::filesystem::path& filePath) {
-    return calculateFileSha256(filePath, {});
+    return calculateFileSha256(filePath, {}, {});
 }
 
 FileHashResult calculateFileSha256(
     const std::filesystem::path& filePath,
     const FileHashProgressCallback& progressCallback) {
+    return calculateFileSha256(filePath, progressCallback, {});
+}
+
+FileHashResult calculateFileSha256(
+    const std::filesystem::path& filePath,
+    const FileHashProgressCallback& progressCallback,
+    std::stop_token stopToken) {
+    if (stopToken.stop_requested()) {
+        return {{}, {}, true};
+    }
+
     const HANDLE rawFileHandle = CreateFileW(
         filePath.c_str(),
         GENERIC_READ,
@@ -205,6 +216,10 @@ FileHashResult calculateFileSha256(
     std::array<unsigned char, kReadBufferSize> buffer{};
     std::uintmax_t completedBytes = 0;
     while (true) {
+        if (stopToken.stop_requested()) {
+            return {{}, {}, true};
+        }
+
         DWORD bytesRead = 0;
         if (!ReadFile(
                 fileHandle.get(),
@@ -219,6 +234,9 @@ FileHashResult calculateFileSha256(
         if (bytesRead == 0) {
             break;
         }
+        if (stopToken.stop_requested()) {
+            return {{}, {}, true};
+        }
 
         status = BCryptHashData(
             hashHandle.get(),
@@ -232,6 +250,10 @@ FileHashResult calculateFileSha256(
         if (progressCallback) {
             progressCallback(completedBytes);
         }
+    }
+
+    if (stopToken.stop_requested()) {
+        return {{}, {}, true};
     }
 
     std::vector<unsigned char> digest(hashLength);

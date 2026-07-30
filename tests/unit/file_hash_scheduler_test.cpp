@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <mutex>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
@@ -182,6 +183,55 @@ TEST(FileHashSchedulerTest, WorkerCountIsLimitedByTaskCount) {
 
     EXPECT_EQ(results.size(), tasks.size());
     EXPECT_LE(workerThreadIds.size(), tasks.size());
+}
+
+TEST(FileHashSchedulerTest, CancellationStopsWorkersFromClaimingNewTasks) {
+    constexpr std::size_t kTaskCount = 8U;
+    constexpr std::size_t kWorkerCount = 2U;
+    std::vector<FileHashTask> tasks;
+    for (std::size_t index = 0; index < kTaskCount; ++index) {
+        tasks.push_back({
+            index,
+            std::filesystem::path{"file-" + std::to_string(index)},
+            1U});
+    }
+
+    std::stop_source stopSource;
+    std::mutex probeMutex;
+    std::condition_variable probeCondition;
+    std::size_t activeWorkers = 0U;
+    std::size_t startedTasks = 0U;
+    const CancellableFileHashOperation hashOperation =
+        [&](const std::filesystem::path&,
+            const FileHashProgressCallback&,
+            std::stop_token) {
+            std::unique_lock lock{probeMutex};
+            ++activeWorkers;
+            ++startedTasks;
+            if (activeWorkers == kWorkerCount) {
+                stopSource.request_stop();
+                probeCondition.notify_all();
+            } else {
+                probeCondition.wait(lock, [&stopSource]() {
+                    return stopSource.stop_requested();
+                });
+            }
+            --activeWorkers;
+            return FileHashResult{{}, {}, true};
+        };
+
+    const FileHashScheduleResult result = hashFilesConcurrently(
+        tasks,
+        kWorkerCount,
+        kTaskCount,
+        {},
+        stopSource.get_token(),
+        hashOperation);
+
+    EXPECT_TRUE(result.isCancelled);
+    EXPECT_EQ(startedTasks, kWorkerCount);
+    EXPECT_EQ(activeWorkers, 0U);
+    EXPECT_TRUE(result.results.empty());
 }
 
 }

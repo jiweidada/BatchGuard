@@ -32,29 +32,57 @@ bool isGroupBefore(const DuplicateGroup& left, const DuplicateGroup& right) {
 
 std::vector<DuplicateGroup> findDuplicateGroups(
     const std::vector<FileRecord>& fileRecords) {
+    return findDuplicateGroups(fileRecords, {}).groups;
+}
+
+DuplicateGroupingResult findDuplicateGroups(
+    const std::vector<FileRecord>& fileRecords,
+    std::stop_token stopToken) {
+    DuplicateGroupingResult result;
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        return result;
+    }
+
     std::map<ContentKey, std::vector<std::filesystem::path>> pathsByContent;
     for (const FileRecord& record : fileRecords) {
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            return result;
+        }
         if (!record.sha256.has_value()) {
             continue;
         }
         pathsByContent[{record.fileSize, *record.sha256}].push_back(record.path);
     }
 
-    std::vector<DuplicateGroup> groups;
     for (auto& [contentKey, filePaths] : pathsByContent) {
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            return result;
+        }
         if (filePaths.size() < 2U) {
             continue;
         }
 
         std::sort(filePaths.begin(), filePaths.end(), isPathBefore);
-        groups.push_back({
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            return result;
+        }
+        result.groups.push_back({
             contentKey.first,
             contentKey.second,
             std::move(filePaths)});
     }
 
-    std::sort(groups.begin(), groups.end(), isGroupBefore);
-    return groups;
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        return result;
+    }
+    std::sort(result.groups.begin(), result.groups.end(), isGroupBefore);
+    result.isCancelled = stopToken.stop_requested();
+    return result;
 }
 
 }

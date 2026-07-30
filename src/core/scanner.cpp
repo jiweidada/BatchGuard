@@ -46,13 +46,38 @@ ScanReport scanDirectory(
     const std::filesystem::path& rootPath,
     const ScanOptions& scanOptions,
     const ScanProgressCallback& progressCallback) {
+    ScanResult result = scanDirectory(
+        rootPath,
+        scanOptions,
+        progressCallback,
+        {});
+    return std::move(result.report).value();
+}
+
+ScanResult scanDirectory(
+    const std::filesystem::path& rootPath,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback,
+    std::stop_token stopToken) {
+    if (stopToken.stop_requested()) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
+
     FileDiscoveryResult discoveryResult =
-        discoverFiles(rootPath, progressCallback);
+        discoverFiles(rootPath, progressCallback, stopToken);
+    if (discoveryResult.isCancelled) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
+
     ContentFingerprintResult fingerprintResult =
         fingerprintFileCandidates(
             discoveryResult.filePaths,
             scanOptions,
-            progressCallback);
+            progressCallback,
+            stopToken);
+    if (fingerprintResult.isCancelled) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
 
     const std::size_t hashingFailureCount = static_cast<std::size_t>(std::count_if(
         fingerprintResult.failures.begin(),
@@ -75,7 +100,16 @@ ScanReport scanDirectory(
             0U,
             false});
     }
-    report.duplicateGroups = findDuplicateGroups(fingerprintResult.fileRecords);
+    if (stopToken.stop_requested()) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
+
+    DuplicateGroupingResult groupingResult =
+        findDuplicateGroups(fingerprintResult.fileRecords, stopToken);
+    if (groupingResult.isCancelled) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
+    report.duplicateGroups = std::move(groupingResult.groups);
     report.failures = std::move(discoveryResult.failures);
     report.failures.insert(
         report.failures.end(),
@@ -91,7 +125,10 @@ ScanReport scanDirectory(
             0U,
             true});
     }
-    return report;
+    if (stopToken.stop_requested()) {
+        return {ScanStatus::Cancelled, std::nullopt};
+    }
+    return {ScanStatus::Completed, std::move(report)};
 }
 
 }

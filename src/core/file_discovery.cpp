@@ -46,17 +46,34 @@ bool isFailureBefore(const FileFailure& left, const FileFailure& right) {
 }
 
 FileDiscoveryResult discoverFiles(const std::filesystem::path& rootPath) {
-    return discoverFiles(rootPath, {});
+    return discoverFiles(rootPath, {}, {});
 }
 
 FileDiscoveryResult discoverFiles(
     const std::filesystem::path& rootPath,
     const ScanProgressCallback& progressCallback) {
+    return discoverFiles(rootPath, progressCallback, {});
+}
+
+FileDiscoveryResult discoverFiles(
+    const std::filesystem::path& rootPath,
+    const ScanProgressCallback& progressCallback,
+    std::stop_token stopToken) {
     FileDiscoveryResult result;
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        return result;
+    }
+
     std::vector<std::filesystem::path> pendingDirectories{rootPath};
     notifyProgress(progressCallback, 0U, false);
 
     while (!pendingDirectories.empty()) {
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            break;
+        }
+
         const std::filesystem::path currentDirectory = pendingDirectories.back();
         pendingDirectories.pop_back();
 
@@ -72,6 +89,11 @@ FileDiscoveryResult discoverFiles(
 
         const std::filesystem::directory_iterator end;
         while (iterator != end) {
+            if (stopToken.stop_requested()) {
+                result.isCancelled = true;
+                break;
+            }
+
             const std::filesystem::path entryPath = iterator->path();
             const std::filesystem::file_status status = iterator->symlink_status(errorCode);
             if (errorCode) {
@@ -84,6 +106,10 @@ FileDiscoveryResult discoverFiles(
             } else if (std::filesystem::is_regular_file(status)) {
                 result.filePaths.push_back(entryPath);
                 notifyProgress(progressCallback, result.filePaths.size(), false);
+                if (stopToken.stop_requested()) {
+                    result.isCancelled = true;
+                    break;
+                }
             }
 
             iterator.increment(errorCode);
@@ -93,11 +119,17 @@ FileDiscoveryResult discoverFiles(
                 break;
             }
         }
+        if (result.isCancelled) {
+            break;
+        }
     }
 
     std::sort(result.filePaths.begin(), result.filePaths.end(), isPathBefore);
     std::sort(result.failures.begin(), result.failures.end(), isFailureBefore);
-    notifyProgress(progressCallback, result.filePaths.size(), true);
+    if (!result.isCancelled) {
+        notifyProgress(progressCallback, result.filePaths.size(), true);
+        result.isCancelled = stopToken.stop_requested();
+    }
     return result;
 }
 

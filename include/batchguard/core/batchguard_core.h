@@ -10,4 +10,5 @@
 #include "batchguard/core/scan_options.h"
 #include "batchguard/core/scan_progress.h"
 #include "batchguard/core/scan_report.h"
+#include "batchguard/core/scan_result.h"
 #include "batchguard/core/scanner.h"

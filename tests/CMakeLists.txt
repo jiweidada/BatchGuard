@@ -1,4 +1,5 @@
 add_executable(batchguard_tests
+    integration/cancellation_test.cpp
     integration/concurrent_hashing_test.cpp
     integration/progress_reporting_test.cpp
     integration/robustness_test.cpp

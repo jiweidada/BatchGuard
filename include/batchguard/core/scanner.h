@@ -3,8 +3,10 @@
 #include "batchguard/core/scan_options.h"
 #include "batchguard/core/scan_progress.h"
 #include "batchguard/core/scan_report.h"
+#include "batchguard/core/scan_result.h"
 
 #include <filesystem>
+#include <stop_token>
 
 namespace batchguard {
 
@@ -23,5 +25,13 @@ namespace batchguard {
     const std::filesystem::path& rootPath,
     const ScanOptions& scanOptions,
     const ScanProgressCallback& progressCallback);
+
+// 按指定配置执行可取消扫描。只有完整结束时，返回结果才包含 `ScanReport`。
+// 停止请求属于独立终态，不会伪装成文件失败或不完整报告。
+[[nodiscard]] ScanResult scanDirectory(
+    const std::filesystem::path& rootPath,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback,
+    std::stop_token stopToken);
 
 }

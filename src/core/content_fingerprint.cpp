@@ -54,24 +54,56 @@ bool isFailureBefore(const FileFailure& left, const FileFailure& right) {
     return left.errorCode.value() < right.errorCode.value();
 }
 
+void sortResult(ContentFingerprintResult& result) {
+    std::sort(
+        result.fileRecords.begin(),
+        result.fileRecords.end(),
+        isRecordBefore);
+    std::sort(
+        result.failures.begin(),
+        result.failures.end(),
+        isFailureBefore);
+}
+
 }
 
 ContentFingerprintResult fingerprintFileCandidates(
     const std::vector<std::filesystem::path>& filePaths) {
-    return fingerprintFileCandidates(filePaths, ScanOptions{}, {});
+    return fingerprintFileCandidates(filePaths, ScanOptions{}, {}, {});
 }
 
 ContentFingerprintResult fingerprintFileCandidates(
     const std::vector<std::filesystem::path>& filePaths,
     const ScanProgressCallback& progressCallback) {
-    return fingerprintFileCandidates(filePaths, ScanOptions{}, progressCallback);
+    return fingerprintFileCandidates(
+        filePaths,
+        ScanOptions{},
+        progressCallback,
+        {});
 }
 
 ContentFingerprintResult fingerprintFileCandidates(
     const std::vector<std::filesystem::path>& filePaths,
     const ScanOptions& scanOptions,
     const ScanProgressCallback& progressCallback) {
+    return fingerprintFileCandidates(
+        filePaths,
+        scanOptions,
+        progressCallback,
+        {});
+}
+
+ContentFingerprintResult fingerprintFileCandidates(
+    const std::vector<std::filesystem::path>& filePaths,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback,
+    std::stop_token stopToken) {
     ContentFingerprintResult result;
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        return result;
+    }
+
     std::map<std::uintmax_t, std::vector<std::size_t>> recordIndicesBySize;
     std::size_t completedMetadataItems = 0;
     notifyProgress(
@@ -82,8 +114,18 @@ ContentFingerprintResult fingerprintFileCandidates(
         0U,
         0U,
         false);
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        return result;
+    }
 
     for (const std::filesystem::path& filePath : filePaths) {
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            sortResult(result);
+            return result;
+        }
+
         std::error_code errorCode;
         const std::uintmax_t fileSize = std::filesystem::file_size(filePath, errorCode);
         if (errorCode) {
@@ -106,6 +148,11 @@ ContentFingerprintResult fingerprintFileCandidates(
             0U,
             0U,
             false);
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            sortResult(result);
+            return result;
+        }
     }
     notifyProgress(
         progressCallback,
@@ -115,17 +162,34 @@ ContentFingerprintResult fingerprintFileCandidates(
         0U,
         0U,
         true);
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        sortResult(result);
+        return result;
+    }
 
     std::size_t totalHashItems = 0;
     std::uintmax_t totalHashBytes = 0;
     std::vector<FileHashTask> hashTasks;
     for (const auto& sizeGroup : recordIndicesBySize) {
+        if (stopToken.stop_requested()) {
+            result.isCancelled = true;
+            sortResult(result);
+            return result;
+        }
+
         const std::vector<std::size_t>& recordIndices = sizeGroup.second;
         if (recordIndices.size() < 2U) {
             continue;
         }
         totalHashItems += recordIndices.size();
         for (const std::size_t recordIndex : recordIndices) {
+            if (stopToken.stop_requested()) {
+                result.isCancelled = true;
+                sortResult(result);
+                return result;
+            }
+
             totalHashBytes = addWithoutOverflow(
                 totalHashBytes,
                 result.fileRecords[recordIndex].fileSize);
@@ -144,8 +208,13 @@ ContentFingerprintResult fingerprintFileCandidates(
         0U,
         totalHashBytes,
         false);
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        sortResult(result);
+        return result;
+    }
 
-    const std::vector<ScheduledFileHashResult> hashResults =
+    const FileHashScheduleResult hashScheduleResult =
         hashFilesConcurrently(
             hashTasks,
             scanOptions.hashWorkerCount,
@@ -160,11 +229,23 @@ ContentFingerprintResult fingerprintFileCandidates(
                     totalHashBytes,
                     false);
             },
+            stopToken,
             [](const std::filesystem::path& filePath,
-               const FileHashProgressCallback& fileProgressCallback) {
-                return calculateFileSha256(filePath, fileProgressCallback);
+               const FileHashProgressCallback& fileProgressCallback,
+               std::stop_token fileStopToken) {
+                return calculateFileSha256(
+                    filePath,
+                    fileProgressCallback,
+                    fileStopToken);
             });
-    for (const ScheduledFileHashResult& scheduledResult : hashResults) {
+    if (hashScheduleResult.isCancelled) {
+        result.isCancelled = true;
+        sortResult(result);
+        return result;
+    }
+
+    for (const ScheduledFileHashResult& scheduledResult :
+         hashScheduleResult.results) {
         FileRecord& record = result.fileRecords[scheduledResult.recordIndex];
         if (!scheduledResult.hashResult.isSuccess()) {
             result.failures.push_back({
@@ -183,15 +264,13 @@ ContentFingerprintResult fingerprintFileCandidates(
         totalHashBytes,
         totalHashBytes,
         true);
+    if (stopToken.stop_requested()) {
+        result.isCancelled = true;
+        sortResult(result);
+        return result;
+    }
 
-    std::sort(
-        result.fileRecords.begin(),
-        result.fileRecords.end(),
-        isRecordBefore);
-    std::sort(
-        result.failures.begin(),
-        result.failures.end(),
-        isFailureBefore);
+    sortResult(result);
     return result;
 }
 

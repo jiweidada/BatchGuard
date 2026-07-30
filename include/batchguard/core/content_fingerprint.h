@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@ struct FileRecord {
 struct ContentFingerprintResult {
     std::vector<FileRecord> fileRecords;
     std::vector<FileFailure> failures;
+    bool isCancelled{};
 };
 
 // 读取每个普通文件的大小，并只对至少有两个成员的同大小候选组计算 SHA-256。
@@ -41,5 +43,12 @@ struct ContentFingerprintResult {
     const std::vector<std::filesystem::path>& filePaths,
     const ScanOptions& scanOptions,
     const ScanProgressCallback& progressCallback);
+
+// 按扫描配置执行可取消的元数据读取和候选哈希。
+[[nodiscard]] ContentFingerprintResult fingerprintFileCandidates(
+    const std::vector<std::filesystem::path>& filePaths,
+    const ScanOptions& scanOptions,
+    const ScanProgressCallback& progressCallback,
+    std::stop_token stopToken);
 
 }

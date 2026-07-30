@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <stop_token>
 #include <string>
 #include <system_error>
 
@@ -12,9 +13,10 @@ namespace batchguard {
 struct FileHashResult {
     std::string sha256;
     std::error_code errorCode;
+    bool isCancelled{};
 
     [[nodiscard]] bool isSuccess() const noexcept {
-        return !errorCode;
+        return !errorCode && !isCancelled;
     }
 };
 
@@ -30,5 +32,11 @@ using FileHashProgressCallback = std::function<void(std::uintmax_t)>;
 [[nodiscard]] FileHashResult calculateFileSha256(
     const std::filesystem::path& filePath,
     const FileHashProgressCallback& progressCallback);
+
+// 分块计算 SHA-256，并在打开文件前及每个读取块之间响应停止请求。
+[[nodiscard]] FileHashResult calculateFileSha256(
+    const std::filesystem::path& filePath,
+    const FileHashProgressCallback& progressCallback,
+    std::stop_token stopToken);
 
 }
