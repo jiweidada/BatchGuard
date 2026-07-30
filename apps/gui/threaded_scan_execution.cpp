@@ -50,6 +50,8 @@ void ThreadedScanExecution::start(const ScanRequest& request) {
     thread_ = QThread::create([this, request, stopToken]() {
         runScan(request, stopToken);
     });
+    // 父子所有权保证执行器提前销毁时仍能回收已经结束的线程对象。
+    thread_->setParent(this);
     connect(
         thread_,
         &QThread::finished,
@@ -143,6 +145,11 @@ void ThreadedScanExecution::runScan(
         }
         if (!result.report.has_value()) {
             storeFailed(QStringLiteral("核心扫描没有返回完整报告。"));
+            return;
+        }
+        if (stopToken.stop_requested()) {
+            // 核心返回和取消请求可能竞争，存储报告前再次确认用户意图。
+            storeCancelled();
             return;
         }
         storeCompleted(std::make_shared<const ScanReport>(

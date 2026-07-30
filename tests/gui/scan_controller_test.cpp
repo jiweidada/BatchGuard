@@ -80,17 +80,20 @@ private slots:
     void invalidDirectoryCannotStart();
     void validDirectoryStartsOnlyOnceAndLocksInputs();
     void cancelRequestIsSentOnlyOnce();
+    void completionAfterCancellationIsTreatedAsCancelled();
     void completionCancellationAndFailureReachTerminalStates();
     void staleCompletionCannotReplaceCurrentScan();
     void mainWindowRendersControllerAvailability();
     void realBackgroundScanCompletesAndReportsProgress();
     void realBackgroundScanCanBeCancelled();
     void closingWindowCancelsAndReclaimsBackgroundThread();
+    void destroyingExecutionReclaimsThreadObject();
     void resultSummaryUsesDocumentedStatistics();
     void resultSummarySaturatesLargeByteTotals();
     void resultModelsExposeStableRowsAndRawSortValues();
     void resultModelsHandleManyRowsWithoutCopyingReports();
     void mainWindowShowsCompleteReportAndHidesCancelledResults();
+    void sortingDuplicateGroupsPreservesSelectedGroup();
 };
 
 void ScanControllerTest::invalidDirectoryCannotStart() {
@@ -145,6 +148,25 @@ void ScanControllerTest::cancelRequestIsSentOnlyOnce() {
     executionPointer->finishCancelled(controller.currentScanId());
     QCOMPARE(controller.state(), ScanState::Cancelled);
     QVERIFY(controller.canEditInputs());
+    QVERIFY(controller.canStart());
+}
+
+void ScanControllerTest::completionAfterCancellationIsTreatedAsCancelled() {
+    QTemporaryDir directory;
+    auto execution = std::make_unique<FakeScanExecution>();
+    FakeScanExecution* executionPointer = execution.get();
+    ScanController controller{std::move(execution)};
+    controller.setDirectoryPath(directory.path());
+    controller.startScan();
+    const quint64 scanId = controller.currentScanId();
+
+    controller.cancelScan();
+    executionPointer->finishCompleted(
+        scanId,
+        std::make_shared<ScanReport>());
+
+    QCOMPARE(controller.state(), ScanState::Cancelled);
+    QVERIFY(!controller.report());
     QVERIFY(controller.canStart());
 }
 
@@ -326,6 +348,20 @@ void ScanControllerTest::closingWindowCancelsAndReclaimsBackgroundThread() {
     QVERIFY(!executionPointer->isRunning());
 }
 
+void ScanControllerTest::destroyingExecutionReclaimsThreadObject() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    auto execution = std::make_unique<ThreadedScanExecution>();
+    execution->start({1U, directory.path(), 1U});
+    QThread* workerThread = execution->findChild<QThread*>();
+    QVERIFY(workerThread);
+    QSignalSpy destroyedSpy{workerThread, &QObject::destroyed};
+
+    execution.reset();
+
+    QCOMPARE(destroyedSpy.count(), 1);
+}
+
 void ScanControllerTest::resultSummaryUsesDocumentedStatistics() {
     ScanReport report;
     report.discoveredFileCount = 8U;
@@ -489,6 +525,55 @@ void ScanControllerTest::mainWindowShowsCompleteReportAndHidesCancelledResults()
     QVERIFY(failureEmpty);
     QVERIFY(!duplicateEmpty->isHidden());
     QVERIFY(!failureEmpty->isHidden());
+}
+
+void ScanControllerTest::sortingDuplicateGroupsPreservesSelectedGroup() {
+    QTemporaryDir directory;
+    auto execution = std::make_unique<FakeScanExecution>();
+    FakeScanExecution* executionPointer = execution.get();
+    MainWindow window{std::move(execution)};
+    auto* directoryInput =
+        window.findChild<QLineEdit*>(QStringLiteral("directoryLineEdit"));
+    auto* startButton =
+        window.findChild<QPushButton*>(QStringLiteral("startButton"));
+    auto* groupTable =
+        window.findChild<QTableView*>(QStringLiteral("duplicateGroupTable"));
+    auto* pathTable =
+        window.findChild<QTableView*>(QStringLiteral("duplicatePathTable"));
+    QVERIFY(directoryInput);
+    QVERIFY(startButton);
+    QVERIFY(groupTable);
+    QVERIFY(pathTable);
+
+    directoryInput->setText(directory.path());
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    auto report = std::make_shared<ScanReport>();
+    report->duplicateGroups = {
+        {100U, "first", {"a", "b"}},
+        {70U, "second", {"c", "d", "e"}}};
+    executionPointer->finishCompleted(1U, report);
+
+    groupTable->selectRow(1);
+    QCOMPARE(
+        groupTable->currentIndex()
+            .data(DuplicateGroupModel::ReportGroupIndexRole)
+            .toULongLong(),
+        qulonglong{0U});
+    QCOMPARE(
+        pathTable->model()->index(0, 0).data().toString(),
+        QStringLiteral("a"));
+
+    groupTable->sortByColumn(2, Qt::DescendingOrder);
+
+    QCOMPARE(
+        groupTable->currentIndex()
+            .data(DuplicateGroupModel::ReportGroupIndexRole)
+            .toULongLong(),
+        qulonglong{0U});
+    QCOMPARE(groupTable->currentIndex().row(), 0);
+    QCOMPARE(
+        pathTable->model()->index(0, 0).data().toString(),
+        QStringLiteral("a"));
 }
 
 }

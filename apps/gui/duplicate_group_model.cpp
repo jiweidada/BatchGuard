@@ -121,11 +121,46 @@ void DuplicateGroupModel::sort(int column, Qt::SortOrder order) {
     if (column < 0 || column >= columnCount()) {
         return;
     }
-    beginResetModel();
+
+    // 排序时重映射持久索引，避免当前重复组选择与路径详情失去联动。
+    const QModelIndexList oldPersistentIndexes = persistentIndexList();
+    std::vector<std::size_t> persistentGroupIndices;
+    persistentGroupIndices.reserve(
+        static_cast<std::size_t>(oldPersistentIndexes.size()));
+    for (const QModelIndex& index : oldPersistentIndexes) {
+        persistentGroupIndices.push_back(
+            reportGroupIndexForRow(index.row()));
+    }
+
+    emit layoutAboutToBeChanged(
+        {},
+        QAbstractItemModel::VerticalSortHint);
     sortColumn_ = column;
     sortOrder_ = order;
     rebuildOrder();
-    endResetModel();
+
+    QModelIndexList newPersistentIndexes;
+    newPersistentIndexes.reserve(oldPersistentIndexes.size());
+    for (int index = 0; index < oldPersistentIndexes.size(); ++index) {
+        const std::size_t reportGroupIndex =
+            persistentGroupIndices[static_cast<std::size_t>(index)];
+        const auto row = std::find(
+            orderedGroupIndices_.begin(),
+            orderedGroupIndices_.end(),
+            reportGroupIndex);
+        if (row == orderedGroupIndices_.end()) {
+            newPersistentIndexes.push_back({});
+            continue;
+        }
+        newPersistentIndexes.push_back(createIndex(
+            static_cast<int>(
+                std::distance(orderedGroupIndices_.begin(), row)),
+            oldPersistentIndexes[index].column()));
+    }
+    changePersistentIndexList(
+        oldPersistentIndexes,
+        newPersistentIndexes);
+    emit layoutChanged({}, QAbstractItemModel::VerticalSortHint);
 }
 
 void DuplicateGroupModel::setReport(SharedScanReport report) {

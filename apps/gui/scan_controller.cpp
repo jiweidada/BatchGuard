@@ -183,6 +183,11 @@ void ScanController::handleCompleted(
     if (!acceptsEvent(scanId) || !report) {
         return;
     }
+    if (state_ == ScanState::Cancelling) {
+        // 用户取消已经成为当前意图，迟到的完成事件不得覆盖取消终态。
+        handleCancelled(scanId);
+        return;
+    }
     report_ = report;
     elapsedMilliseconds_ = scanTimer_.elapsed();
     failureMessage_.clear();
