@@ -172,6 +172,13 @@
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="progressDetailsLabel">
+         <property name="text">
+          <string>正在准备扫描…</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLabel" name="failureLabel">
          <property name="text">
           <string/>

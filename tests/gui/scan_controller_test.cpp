@@ -1,13 +1,19 @@
 #include "main_window.h"
 #include "scan_controller.h"
 #include "scan_execution.h"
+#include "threaded_scan_execution.h"
 
+#include <QFile>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QSpinBox>
 #include <QTemporaryDir>
+#include <QThread>
+#include <QTimer>
 #include <QtTest>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -43,6 +49,18 @@ public:
     int cancelRequestCount{};
 };
 
+void createFile(
+    const QString& path,
+    int blockCount,
+    char fillCharacter) {
+    QFile file{path};
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray block{1024 * 1024, fillCharacter};
+    for (int index = 0; index < blockCount; ++index) {
+        QCOMPARE(file.write(block), static_cast<qint64>(block.size()));
+    }
+}
+
 class ScanControllerTest final : public QObject {
     Q_OBJECT
 
@@ -53,6 +71,9 @@ private slots:
     void completionCancellationAndFailureReachTerminalStates();
     void staleCompletionCannotReplaceCurrentScan();
     void mainWindowRendersControllerAvailability();
+    void realBackgroundScanCompletesAndReportsProgress();
+    void realBackgroundScanCanBeCancelled();
+    void closingWindowCancelsAndReclaimsBackgroundThread();
 };
 
 void ScanControllerTest::invalidDirectoryCannotStart() {
@@ -182,6 +203,110 @@ void ScanControllerTest::mainWindowRendersControllerAvailability() {
     QVERIFY(!workerInput->isEnabled());
     QVERIFY(!startButton->isEnabled());
     QVERIFY(cancelButton->isEnabled());
+}
+
+void ScanControllerTest::realBackgroundScanCompletesAndReportsProgress() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    createFile(directory.filePath(QStringLiteral("first.bin")), 2, 'a');
+    createFile(directory.filePath(QStringLiteral("second.bin")), 2, 'a');
+
+    auto execution = std::make_unique<ThreadedScanExecution>();
+    ThreadedScanExecution* executionPointer = execution.get();
+    ScanController controller{std::move(execution)};
+    QSignalSpy progressSpy{
+        &controller,
+        &ScanController::scanProgressChanged};
+    bool didGuiTimerRun = false;
+    QTimer::singleShot(0, &controller, [&didGuiTimerRun]() {
+        didGuiTimerRun = true;
+    });
+
+    controller.setDirectoryPath(directory.path());
+    controller.setHashWorkerCount(2);
+    controller.startScan();
+
+    QTRY_COMPARE_WITH_TIMEOUT(
+        controller.state(),
+        ScanState::Completed,
+        10000);
+    QVERIFY(didGuiTimerRun);
+    QVERIFY(!executionPointer->isRunning());
+    const SharedScanReport report = controller.report();
+    QVERIFY(report);
+    QCOMPARE(report->duplicateGroups.size(), std::size_t{1U});
+    QVERIFY(progressSpy.count() >= 4);
+
+    std::vector<ScanProgressStage> stages;
+    for (const QList<QVariant>& arguments : progressSpy) {
+        const ScanProgress progress =
+            qvariant_cast<ScanProgress>(arguments.at(0));
+        if (stages.empty() || stages.back() != progress.stage) {
+            stages.push_back(progress.stage);
+        }
+    }
+    const std::vector<ScanProgressStage> expectedStages{
+        ScanProgressStage::Discovery,
+        ScanProgressStage::Metadata,
+        ScanProgressStage::Hashing,
+        ScanProgressStage::Grouping};
+    QVERIFY(stages == expectedStages);
+}
+
+void ScanControllerTest::realBackgroundScanCanBeCancelled() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    createFile(directory.filePath(QStringLiteral("first.bin")), 4, 'a');
+    createFile(directory.filePath(QStringLiteral("second.bin")), 4, 'a');
+
+    auto execution = std::make_unique<ThreadedScanExecution>();
+    ThreadedScanExecution* executionPointer = execution.get();
+    ScanController controller{std::move(execution)};
+    connect(
+        executionPointer,
+        &ScanExecution::progressChanged,
+        executionPointer,
+        [executionPointer](quint64, const ScanProgress&) {
+            executionPointer->requestCancel();
+        },
+        Qt::DirectConnection);
+
+    controller.setDirectoryPath(directory.path());
+    controller.startScan();
+
+    QTRY_COMPARE_WITH_TIMEOUT(
+        controller.state(),
+        ScanState::Cancelled,
+        10000);
+    QVERIFY(!controller.report());
+    QVERIFY(!executionPointer->isRunning());
+    QVERIFY(controller.canStart());
+}
+
+void ScanControllerTest::closingWindowCancelsAndReclaimsBackgroundThread() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    createFile(directory.filePath(QStringLiteral("first.bin")), 8, 'a');
+    createFile(directory.filePath(QStringLiteral("second.bin")), 8, 'a');
+
+    auto execution = std::make_unique<ThreadedScanExecution>();
+    ThreadedScanExecution* executionPointer = execution.get();
+    MainWindow window{std::move(execution)};
+    auto* directoryInput =
+        window.findChild<QLineEdit*>(QStringLiteral("directoryLineEdit"));
+    auto* startButton =
+        window.findChild<QPushButton*>(QStringLiteral("startButton"));
+    QVERIFY(directoryInput);
+    QVERIFY(startButton);
+
+    window.show();
+    directoryInput->setText(directory.path());
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    QVERIFY(executionPointer->isRunning());
+    window.close();
+
+    QTRY_VERIFY_WITH_TIMEOUT(!window.isVisible(), 10000);
+    QVERIFY(!executionPointer->isRunning());
 }
 
 }

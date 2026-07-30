@@ -7,6 +7,7 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+class QCloseEvent;
 namespace Ui {
 class MainWindow;
 }
@@ -27,14 +28,19 @@ public:
         QWidget* parent = nullptr);
     ~MainWindow() override;
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private:
     void chooseDirectory();
     void renderState();
+    void renderProgress(const batchguard::ScanProgress& progress);
     [[nodiscard]] static std::unique_ptr<ScanExecution>
         createDefaultExecution();
 
     std::unique_ptr<Ui::MainWindow> ui_;
     std::unique_ptr<ScanController> controller_;
+    bool isClosePending_{};
 };
 
 }

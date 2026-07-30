@@ -93,6 +93,8 @@ if(BATCHGUARD_BUILD_GUI)
         apps/gui/scan_controller.h
         apps/gui/scan_execution.h
         apps/gui/scan_state.h
+        apps/gui/threaded_scan_execution.cpp
+        apps/gui/threaded_scan_execution.h
     )
 
     target_include_directories(batchguard_gui_support

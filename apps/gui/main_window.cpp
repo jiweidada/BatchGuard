@@ -1,32 +1,54 @@
 #include "main_window.h"
 
 #include "scan_controller.h"
+#include "threaded_scan_execution.h"
 #include "ui_main_window.h"
 
+#include <QCloseEvent>
 #include <QFileDialog>
 #include <QTimer>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 namespace batchguard::gui {
 namespace {
 
-// 阶段 12 的默认执行器只验证界面状态流转，阶段 13 将替换为真实后台扫描。
-class DeferredEmptyScanExecution final : public ScanExecution {
-public:
-    using ScanExecution::ScanExecution;
-
-    void start(const ScanRequest& request) override {
-        QTimer::singleShot(0, this, [this, scanId = request.scanId]() {
-            auto report = std::make_shared<ScanReport>();
-            emit completed(scanId, report);
-        });
+QString stageName(ScanProgressStage stage) {
+    switch (stage) {
+    case ScanProgressStage::Discovery:
+        return QStringLiteral("正在发现文件");
+    case ScanProgressStage::Metadata:
+        return QStringLiteral("正在读取文件信息");
+    case ScanProgressStage::Hashing:
+        return QStringLiteral("正在计算内容指纹");
+    case ScanProgressStage::Grouping:
+        return QStringLiteral("正在整理重复组");
     }
+    return QStringLiteral("正在扫描");
+}
 
-    void requestCancel() override {
+int progressValue(const ScanProgress& progress) {
+    constexpr int kProgressMaximum = 1000;
+    if (progress.totalBytes > 0U) {
+        const std::uintmax_t boundedBytes =
+            (std::min)(progress.completedBytes, progress.totalBytes);
+        return static_cast<int>(
+            static_cast<long double>(boundedBytes) /
+            static_cast<long double>(progress.totalBytes) *
+            kProgressMaximum);
     }
-};
+    if (progress.totalItems > 0U) {
+        const std::size_t boundedItems =
+            (std::min)(progress.completedItems, progress.totalItems);
+        return static_cast<int>(
+            static_cast<long double>(boundedItems) /
+            static_cast<long double>(progress.totalItems) *
+            kProgressMaximum);
+    }
+    return 0;
+}
 
 }
 
@@ -74,11 +96,27 @@ MainWindow::MainWindow(
         &ScanController::viewStateChanged,
         this,
         &MainWindow::renderState);
+    connect(
+        controller_.get(),
+        &ScanController::scanProgressChanged,
+        this,
+        &MainWindow::renderProgress);
 
     renderState();
 }
 
 MainWindow::~MainWindow() = default;
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (controller_->state() == ScanState::Scanning ||
+        controller_->state() == ScanState::Cancelling) {
+        isClosePending_ = true;
+        controller_->cancelScan();
+        event->ignore();
+        return;
+    }
+    event->accept();
+}
 
 void MainWindow::chooseDirectory() {
     const QString directoryPath = QFileDialog::getExistingDirectory(
@@ -108,13 +146,47 @@ void MainWindow::renderState() {
         controller_->state() == ScanState::Scanning ||
         controller_->state() == ScanState::Cancelling;
     ui_->progressBar->setVisible(isBusy);
-    if (isBusy) {
+    ui_->progressDetailsLabel->setVisible(isBusy);
+    if (controller_->state() == ScanState::Scanning) {
         ui_->progressBar->setRange(0, 0);
+        ui_->progressDetailsLabel->setText(QStringLiteral("正在准备扫描…"));
+    }
+
+    if (isClosePending_ && !isBusy) {
+        QTimer::singleShot(0, this, &QWidget::close);
+    }
+}
+
+void MainWindow::renderProgress(const ScanProgress& progress) {
+    ui_->statusLabel->setText(stageName(progress.stage));
+    if (progress.totalItems == 0U && progress.totalBytes == 0U) {
+        ui_->progressBar->setRange(0, 0);
+        ui_->progressDetailsLabel->setText(
+            progress.isStageComplete
+                ? QStringLiteral("当前阶段已完成")
+                : QStringLiteral("正在计算工作量…"));
+        return;
+    }
+
+    ui_->progressBar->setRange(0, 1000);
+    ui_->progressBar->setValue(progressValue(progress));
+    if (progress.totalBytes > 0U) {
+        ui_->progressDetailsLabel->setText(
+            QStringLiteral("%1 / %2 字节，%3 / %4 个文件")
+                .arg(progress.completedBytes)
+                .arg(progress.totalBytes)
+                .arg(progress.completedItems)
+                .arg(progress.totalItems));
+    } else {
+        ui_->progressDetailsLabel->setText(
+            QStringLiteral("%1 / %2 个文件")
+                .arg(progress.completedItems)
+                .arg(progress.totalItems));
     }
 }
 
 std::unique_ptr<ScanExecution> MainWindow::createDefaultExecution() {
-    return std::make_unique<DeferredEmptyScanExecution>();
+    return std::make_unique<ThreadedScanExecution>();
 }
 
 }
