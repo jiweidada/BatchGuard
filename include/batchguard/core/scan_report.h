@@ -4,6 +4,7 @@
 #include "batchguard/core/file_failure.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -15,6 +16,10 @@ struct ScanReport {
     std::filesystem::path rootPath;
     std::size_t discoveredFileCount{};
     std::size_t successfulFileCount{};
+    std::uintmax_t totalLogicalBytes{};
+    std::size_t candidateFileCount{};
+    std::uintmax_t candidateBytes{};
+    std::size_t hashedFileCount{};
     std::vector<FileFailure> failures;
     std::vector<DuplicateGroup> duplicateGroups;
 

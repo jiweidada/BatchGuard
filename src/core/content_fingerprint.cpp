@@ -137,6 +137,9 @@ ContentFingerprintResult fingerprintFileCandidates(
             const std::size_t recordIndex = result.fileRecords.size();
             result.fileRecords.push_back({filePath, fileSize, std::nullopt});
             recordIndicesBySize[fileSize].push_back(recordIndex);
+            result.totalLogicalBytes = addWithoutOverflow(
+                result.totalLogicalBytes,
+                fileSize);
         }
 
         ++completedMetadataItems;
@@ -199,6 +202,8 @@ ContentFingerprintResult fingerprintFileCandidates(
                 result.fileRecords[recordIndex].fileSize});
         }
     }
+    result.candidateFileCount = totalHashItems;
+    result.candidateBytes = totalHashBytes;
 
     notifyProgress(
         progressCallback,
@@ -254,6 +259,7 @@ ContentFingerprintResult fingerprintFileCandidates(
                 scheduledResult.hashResult.errorCode});
         } else {
             record.sha256 = scheduledResult.hashResult.sha256;
+            ++result.hashedFileCount;
         }
     }
     notifyProgress(

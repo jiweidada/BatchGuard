@@ -25,6 +25,10 @@ struct FileRecord {
 struct ContentFingerprintResult {
     std::vector<FileRecord> fileRecords;
     std::vector<FileFailure> failures;
+    std::uintmax_t totalLogicalBytes{};
+    std::size_t candidateFileCount{};
+    std::uintmax_t candidateBytes{};
+    std::size_t hashedFileCount{};
     bool isCancelled{};
 };
 

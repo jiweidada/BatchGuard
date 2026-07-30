@@ -97,6 +97,23 @@ TEST(ScannerTest, KeepsThreeFilesInOneDuplicateGroup) {
     EXPECT_EQ(report.successfulFileCount, 3U);
 }
 
+TEST(ScannerTest, ReportsDetailedProcessingStatistics) {
+    const test_support::TemporaryDirectory temporaryDirectory;
+    createBinaryFile(temporaryDirectory.path() / "first.bin", "same");
+    createBinaryFile(temporaryDirectory.path() / "second.bin", "same");
+    createBinaryFile(temporaryDirectory.path() / "unique.bin", "one");
+    createBinaryFile(temporaryDirectory.path() / "other.bin", "other");
+
+    const ScanReport report = scanDirectory(temporaryDirectory.path());
+
+    EXPECT_EQ(report.discoveredFileCount, 4U);
+    EXPECT_EQ(report.successfulFileCount, 4U);
+    EXPECT_EQ(report.totalLogicalBytes, 16U);
+    EXPECT_EQ(report.candidateFileCount, 2U);
+    EXPECT_EQ(report.candidateBytes, 8U);
+    EXPECT_EQ(report.hashedFileCount, 2U);
+}
+
 TEST(ScannerTest, HashingFailureProducesPartialReportAndContinues) {
     const test_support::TemporaryDirectory temporaryDirectory;
     const std::filesystem::path lockedFile = temporaryDirectory.path() / "locked.bin";

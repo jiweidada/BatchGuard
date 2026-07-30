@@ -91,6 +91,10 @@ ScanResult scanDirectory(
     report.discoveredFileCount = discoveryResult.filePaths.size();
     report.successfulFileCount =
         fingerprintResult.fileRecords.size() - hashingFailureCount;
+    report.totalLogicalBytes = fingerprintResult.totalLogicalBytes;
+    report.candidateFileCount = fingerprintResult.candidateFileCount;
+    report.candidateBytes = fingerprintResult.candidateBytes;
+    report.hashedFileCount = fingerprintResult.hashedFileCount;
     if (progressCallback) {
         progressCallback({
             ScanProgressStage::Grouping,
