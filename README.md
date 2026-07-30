@@ -160,8 +160,8 @@ ctest --test-dir cmake-build-debug --output-on-failure
 - `docs/测试/阶段7测试.md`：阶段 7 扫描进度事件和控制台动态显示。
 - `docs/测试/阶段8测试.md`：阶段 8 有界文件级并发和线程安全进度汇聚。
 - `docs/测试/阶段9测试.md`：阶段 9 最终交付验收。
-- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段14测试.md`：Qt 构建、取消、
-  GUI 状态、后台扫描和结果展示。
+- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段15测试.md`：Qt 构建、取消、
+  GUI 状态、后台扫描、结果展示和自动化补强。
 - `docs/学习/`：CMake、GoogleTest 和 Git 学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。

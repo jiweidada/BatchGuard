@@ -213,10 +213,19 @@ void MainWindow::renderProgress(const ScanProgress& progress) {
     ui_->statusLabel->setText(stageName(progress.stage));
     if (progress.totalItems == 0U && progress.totalBytes == 0U) {
         ui_->progressBar->setRange(0, 0);
-        ui_->progressDetailsLabel->setText(
-            progress.isStageComplete
-                ? QStringLiteral("当前阶段已完成")
-                : QStringLiteral("正在计算工作量…"));
+        if (progress.stage == ScanProgressStage::Discovery) {
+            ui_->progressDetailsLabel->setText(
+                progress.isStageComplete
+                    ? QStringLiteral("文件发现完成，共 %1 个文件")
+                        .arg(progress.completedItems)
+                    : QStringLiteral("已发现 %1 个文件")
+                        .arg(progress.completedItems));
+        } else {
+            ui_->progressDetailsLabel->setText(
+                progress.isStageComplete
+                    ? QStringLiteral("当前阶段已完成")
+                    : QStringLiteral("正在计算工作量…"));
+        }
         return;
     }
 
