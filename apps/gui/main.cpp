@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
         mainWindow.show();
         return application.exec();
     } catch (...) {
-        // GUI 尚未建立统一错误对话框，阶段 10 先保证异常不会越过进程边界。
+        // 最外层只负责阻止异常越过进程边界，运行期错误由扫描控制器展示。
         return kInternalErrorExitCode;
     }
 }

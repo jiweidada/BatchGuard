@@ -79,31 +79,60 @@ if(MSVC)
 endif()
 
 if(BATCHGUARD_BUILD_GUI)
-    find_package(Qt5 5.14 REQUIRED COMPONENTS Widgets)
+    set(batchguardQtComponents Widgets)
+    if(BATCHGUARD_BUILD_TESTS)
+        list(APPEND batchguardQtComponents Test)
+    endif()
+    find_package(Qt5 5.14 REQUIRED COMPONENTS ${batchguardQtComponents})
 
-    add_executable(batchguard_gui WIN32
-        apps/gui/main.cpp
+    add_library(batchguard_gui_support STATIC
         apps/gui/main_window.cpp
         apps/gui/main_window.h
         apps/gui/main_window.ui
+        apps/gui/scan_controller.cpp
+        apps/gui/scan_controller.h
+        apps/gui/scan_execution.h
+        apps/gui/scan_state.h
+    )
+
+    target_include_directories(batchguard_gui_support
+        PUBLIC
+            "${CMAKE_CURRENT_SOURCE_DIR}/apps/gui"
+    )
+
+    target_link_libraries(batchguard_gui_support
+        PUBLIC
+            batchguard_core
+            Qt5::Widgets
+    )
+
+    add_executable(batchguard_gui WIN32
+        apps/gui/main.cpp
     )
 
     target_link_libraries(batchguard_gui
         PRIVATE
-            Qt5::Widgets
+            batchguard_gui_support
     )
 
-    set_target_properties(batchguard_gui
+    set_target_properties(
+        batchguard_gui_support
+        batchguard_gui
         PROPERTIES
             AUTOMOC ON
             AUTOUIC ON
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED YES
             CXX_EXTENSIONS NO
+    )
+
+    set_target_properties(batchguard_gui
+        PROPERTIES
             OUTPUT_NAME BatchGuardGui
     )
 
     if(MSVC)
+        target_compile_options(batchguard_gui_support PRIVATE /utf-8)
         target_compile_options(batchguard_gui PRIVATE /utf-8)
     endif()
 

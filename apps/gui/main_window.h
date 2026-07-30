@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scan_execution.h"
+
 #include <QMainWindow>
 
 #include <memory>
@@ -12,16 +14,27 @@ QT_END_NAMESPACE
 
 namespace batchguard::gui {
 
-// 提供阶段 10 的最小 Qt 主窗口，只用于验证构建、链接和基本窗口生命周期。
+class ScanController;
+
+// 提供目录配置、扫描操作和状态反馈，并把用户命令转发给控制器。
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(
+        std::unique_ptr<ScanExecution> execution,
+        QWidget* parent = nullptr);
     ~MainWindow() override;
 
 private:
+    void chooseDirectory();
+    void renderState();
+    [[nodiscard]] static std::unique_ptr<ScanExecution>
+        createDefaultExecution();
+
     std::unique_ptr<Ui::MainWindow> ui_;
+    std::unique_ptr<ScanController> controller_;
 };
 
 }
