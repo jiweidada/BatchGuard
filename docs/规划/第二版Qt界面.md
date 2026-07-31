@@ -337,9 +337,9 @@ GUI 主线程
 
 ### 7.2 核心取消能力
 
-现有 `scanDirectory()` 没有外部停止参数。内部 `std::stop_source` 只用于哈希工作线程
-异常处理，`QThread::requestInterruption()` 不能自动停止纯 C++ 核心，因此必须先
-扩展核心取消语义。
+阶段 11 开始前，`scanDirectory()` 没有外部停止参数。内部 `std::stop_source`
+只用于哈希工作线程异常处理，`QThread::requestInterruption()` 不能自动停止纯
+C++ 核心，因此当时必须先扩展核心取消语义。
 
 计划使用 C++20 `std::stop_token`：
 
@@ -530,7 +530,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - 当前开发目录统一为 CLion 的 `cmake-build-debug`；独立 `build/` 已删除。
 - `windeployqt` 自动部署 Debug Qt DLL 和 `platforms/qwindowsd.dll`，直接启动
   `BatchGuardGui.exe` 不再出现 `0xC0000135`。
-- 当前不创建或维护 `cmake-build-release`；Release 验证延后到阶段 18。
+- 阶段 10 当时不创建或维护 `cmake-build-release`；Release 验证延后到阶段 18。
 - 详细命令和结果见 [阶段10测试.md](../测试/阶段10测试.md)。
 
 ### 阶段 11：核心安全取消
@@ -626,7 +626,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 - 未知总量、零字节候选和 64 位字节进度均有明确映射。
 - 完成、取消和失败终态只在线程回收后交给控制器。
 - 扫描中关闭窗口会先安全取消，结束后自动关闭。
-- Debug CTest 共发现 83 项，0 失败，1 项 Skipped。
+- 审查修复后 Debug CTest 共发现 84 项，0 失败，1 项 Skipped。
 - 详细结果见 [阶段13测试.md](../测试/阶段13测试.md)。
 
 ### 阶段 14：重复项和失败项展示
@@ -795,7 +795,7 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 
 Qt Windows 部署参考：
 
-- <https://doc.qt.io/qt-5/windows-deployment.html>
+- <https://doc.qt.io/archives/qt-5.14/windows-deployment.html>
 
 实际结果（2026-07-31）：
 

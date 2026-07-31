@@ -5,7 +5,9 @@
 BatchGuard 是一个 C++20/CMake 项目：`apps/cli/main.cpp` 是程序入口，
 `batchguard_core` 是静态核心库，`batchguard_cli` 生成 `BatchGuard.exe`，
 `batchguard_cli_support` 封装可测试的 CLI 应用层，`batchguard_tests` 承载
-GoogleTest 测试。`docs/` 保存设计、学习和测试文档。
+GoogleTest 测试；启用 GUI 后，`batchguard_gui` 生成 `BatchGuardGui.exe`，
+`batchguard_gui_support` 封装 Qt 应用层，`batchguard_gui_tests` 承载 Qt Test。
+`docs/` 保存规划、设计、学习、测试和交付文档。
 
 开始新的开发会话或切换阶段前，必须先阅读 `docs/交接文档.md`，核对当前阶段、
 Git 状态、未提交文件和下一步边界。每个阶段实现、验证或提交状态发生变化后，
@@ -14,7 +16,8 @@ Git 状态、未提交文件和下一步边界。每个阶段实现、验证或�
 项目扩展时遵循 `docs/设计/项目结构.md`：公共核心头文件放入
 `include/batchguard/core/`，实现放入 `src/core/`，命令行代码放入
 `apps/cli/`，测试分别放入 `tests/unit/` 和 `tests/integration/`。核心模块
-不得依赖 CLI 或未来的 GUI，也不要在 `main.cpp` 中堆积业务逻辑。
+不得依赖 CLI 或 GUI，也不要在 `main.cpp` 中堆积业务逻辑。GUI 行为测试放入
+`tests/gui/`，Qt 类型不得进入核心公共接口。
 
 第三方源码统一放入 `Third_Party/<library>/`，由 CMake 从本地目录接入，避免
 不同构建目录重复下载。保留上游许可证和版本记录，不直接修改第三方源码；依赖
@@ -22,10 +25,12 @@ Git 状态、未提交文件和下一步边界。每个阶段实现、验证或�
 
 ## 构建、测试与本地开发
 
-本机开发统一使用 CLion CMake Profile，不再另外创建 `build/`。当前 v0.2.0
-开发阶段只维护 `cmake-build-debug/`；Release 配置、部署和完整验收延后到交付
-阶段。开发 Qt GUI 时，Debug Profile 需要设置 `BATCHGUARD_BUILD_GUI=ON`，并通过
-`CMAKE_PREFIX_PATH` 指向与 MSVC 匹配的 Qt 5.14.2 `msvc2017_64` 套件。
+本机开发统一使用 CLion CMake Profile，不再另外创建 `build/`。v0.2.0 的
+Debug、Release 和部署验收均已完成；后续日常开发默认维护
+`cmake-build-debug/`，只有明确进行 Release 回归或交付时才使用
+`cmake-build-release/`。开发 Qt GUI 时，Profile 需要设置
+`BATCHGUARD_BUILD_GUI=ON`，并通过 `CMAKE_PREFIX_PATH` 指向与 MSVC 匹配的
+Qt 5.14.2 `msvc2017_64` 套件。
 
 - `cmake --build cmake-build-debug`：构建 Debug 程序和测试。
 - `.\cmake-build-debug\BatchGuard.exe`：运行 Debug CLI。
@@ -61,9 +66,9 @@ RAII、值语义、`enum class`、显式单参数构造函数，并用 `std::err
 
 ## 提交与合并请求
 
-提交信息采用 `<类型>: <简短说明>`，现有类型包括 `feat`、`docs`、`build` 和
-`chore`，例如 `feat: 添加目录输入验证`。每个提交只表达一个目的；未经讨论
-不要新增第三方依赖。
+提交信息采用 `<类型>: <简短说明>`，现有类型包括 `feat`、`fix`、`test`、
+`docs`、`build` 和 `chore`，例如 `feat: 添加目录输入验证`。每个提交只表达
+一个目的；未经讨论不要新增第三方依赖。
 
 合并请求需说明目标、影响文件、设计理由及验证命令和结果，并关联相关
 Issue。只有涉及可见界面变化时才需要截图。

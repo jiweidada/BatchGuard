@@ -609,6 +609,9 @@ git show v0.1.0
 git push origin v0.1.0
 ```
 
+以上只是命令示例，不表示仓库当前已经存在该标签。BatchGuard 的 Tag 和
+GitHub Release 只有在用户明确要求后才创建，不能因为版本已通过验收就自动发布。
+
 查看标签：
 
 ```powershell
@@ -625,7 +628,7 @@ git tag --list "v0.*"
 ```powershell
 git switch main
 git pull --ff-only
-git switch -c feature/stage-2-cli
+git switch -c feature/<功能名称>
 ```
 
 ### 开发过程中
@@ -633,7 +636,8 @@ git switch -c feature/stage-2-cli
 ```powershell
 git status
 git diff
-cmake --build build/debug
+cmake --build cmake-build-debug
+ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
 ### 提交前
@@ -649,9 +653,9 @@ git diff --cached
 ### 提交与推送
 
 ```powershell
-git commit -m "feat: 添加 CLI 参数解析"
+git commit -m "<类型>: <简短说明>"
 git log -3 --oneline
-git push -u origin feature/stage-2-cli
+git push -u origin feature/<功能名称>
 ```
 
 随后可在 GitHub 创建 Pull Request，审查后合并到 `main`。

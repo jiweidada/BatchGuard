@@ -16,9 +16,9 @@ include/batchguard/core/   核心库公共头文件
 include/batchguard/logging/ 结构化日志公共头文件
 src/core/                  核心库实现
 src/logging/               日志格式化和终端输出实现
-tests/                     GoogleTest 测试
+tests/                     GoogleTest、Qt Test 和测试辅助代码
 Third_Party/               固定版本第三方源码
-docs/                      设计、学习和测试文档
+docs/                      规划、设计、学习、测试和交付文档
 ```
 
 `batchguard_cli` 链接 `batchguard_core`，最终程序名为 `BatchGuard.exe`。
@@ -165,8 +165,10 @@ ctest --test-dir cmake-build-debug --output-on-failure
 
 - `CHANGELOG.md`：版本变更记录。
 - `docs/规划/`：项目目标、完整大纲和第一版 MVP。
+- `docs/规划/第二版Qt界面.md`：v0.2.0 Qt GUI 范围、架构和阶段验收。
 - `docs/设计/`：第一版实现、项目结构和代码规范。
 - `docs/交付/`：项目介绍、面试问答和最终交付清单。
+- `docs/交付/v0.2.0部署说明.md`：Release、Qt 部署、运行库和许可边界。
 - `docs/测试/阶段1测试.md`：阶段 1 测试范围和实际结果。
 - `docs/测试/阶段2测试.md`：阶段 2 参数和目录输入验证。
 - `docs/测试/阶段3测试.md`：阶段 3 递归文件发现和路径处理。

@@ -1,31 +1,31 @@
-# GoogleTest 学习：BatchGuard 测试体系
+# GoogleTest 与 Qt Test 学习：BatchGuard 测试体系
 
 > 分类：学习。
 
-> 目标：理解 GoogleTest、CTest、CMake 和 CLion 如何协作，并为每个开发阶段
-> 留下一份可复查的测试文档。
+> 目标：理解 GoogleTest、Qt Test、CTest、CMake 和 CLion 如何协作，并为每个
+> 开发阶段留下一份可复查的测试文档。
 
 ## 1. 四个工具分别做什么
 
 ```text
-GoogleTest 测试代码
-        │ 编译
-        ▼
-batchguard_tests.exe
-        │ gtest_discover_tests
-        ▼
-CTest 测试清单
-        │ 运行
-        ▼
-CLion 测试窗口 / 终端结果
+GoogleTest 测试代码 ──> batchguard_tests.exe ──> gtest_discover_tests ──┐
+                                                                        │
+Qt Test 测试代码 ─────> batchguard_gui_tests.exe ──> add_test ─────────┤
+                                                                        ▼
+                                                               CTest 测试清单
+                                                                        │
+                                                                        ▼
+                                                        CLion 测试窗口 / 终端结果
 ```
 
 - GoogleTest：提供 `TEST`、`EXPECT_EQ` 等 C++ 测试宏和测试运行器。
+- Qt Test：验证 GUI 状态、信号、模型、线程回收和控件行为。
 - CMake：接入、编译并链接本地 GoogleTest，定义 `batchguard_tests` 目标。
 - CTest：统一发现和执行测试，汇总通过与失败结果。
 - CLion：提供运行、调试、过滤和查看测试结果的图形界面。
 
-CLion 让操作更方便，但测试仍由同一个 `batchguard_tests.exe` 执行。
+CLion 让操作更方便；核心和 CLI 测试由 `batchguard_tests.exe` 执行，GUI 行为
+测试由 `batchguard_gui_tests.exe` 执行，CTest 统一汇总两者。
 
 ## 2. BatchGuard 的版本选择
 
@@ -95,46 +95,54 @@ endif()
 关闭测试：
 
 ```powershell
-cmake -S . -B build/release -DBATCHGUARD_BUILD_TESTS=OFF
+cmake -S . -B cmake-build-release -DBATCHGUARD_BUILD_TESTS=OFF
 ```
 
 ## 5. tests/CMakeLists.txt 当前配置
 
+以下省略完整源文件列表，只展示当前目标关系：
+
 ```cmake
 add_executable(batchguard_tests
-    stage1/smoke_test.cpp
+    integration/cancellation_test.cpp
+    integration/scanner_test.cpp
+    unit/cli_app_test.cpp
+    unit/logging_test.cpp
+    # 其余核心、CLI、并发和健壮性测试。
 )
 
 target_link_libraries(batchguard_tests
     PRIVATE
+        batchguard_cli_support
         batchguard_core
         GTest::gtest_main
 )
 
-set_target_properties(batchguard_tests
-    PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-)
-
 include(GoogleTest)
 gtest_discover_tests(batchguard_tests)
+
+if(BATCHGUARD_BUILD_GUI)
+    add_executable(batchguard_gui_tests
+        gui/scan_controller_test.cpp
+    )
+    target_link_libraries(batchguard_gui_tests
+        PRIVATE
+            batchguard_gui_support
+            Qt5::Test
+    )
+    add_test(
+        NAME BatchGuardGuiTests
+        COMMAND batchguard_gui_tests -platform windows
+    )
+endif()
 ```
 
 - `GTest::gtest_main` 提供 GoogleTest 实现和测试程序入口，不需要自己写 `main`。
-- `batchguard_core` 是被测试目标。
+- `batchguard_core`、CLI 支持层和日志库是 GoogleTest 的被测目标。
 - `gtest_discover_tests` 运行测试程序获取测试清单，并向 CTest 注册每个测试。
-
-随着阶段推进，把新的测试源文件加入 `batchguard_tests`：
-
-```cmake
-add_executable(batchguard_tests
-    stage1/smoke_test.cpp
-    unit/input_validator_test.cpp
-    unit/file_discovery_test.cpp
-)
-```
+- GUI 开启时，`batchguard_gui_tests` 链接 GUI 支持层和 `Qt5::Test`。
+- Qt Test 作为一个 CTest 项注册，内部再运行全部 GUI 行为用例。
+- 新增测试时，根据是否依赖 Qt 加入对应测试目标。
 
 ## 6. 第一个测试
 
@@ -244,50 +252,56 @@ BatchGuard 的文件测试需要一个 RAII 临时目录辅助类型。即使测
 首次构建会从 `Third_Party/googletest` 编译 GoogleTest，但不会下载源码：
 
 ```powershell
-cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug --target batchguard_tests
+cmake --build cmake-build-debug --target batchguard_tests batchguard_gui_tests
 ```
 
 通过 CTest 运行全部测试：
 
 ```powershell
-ctest --test-dir build/debug --output-on-failure
+ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
 直接运行 GTest 程序：
 
 ```powershell
-.\build\debug\batchguard_tests.exe
+.\cmake-build-debug\tests\batchguard_tests.exe
 ```
 
 列出测试：
 
 ```powershell
-.\build\debug\batchguard_tests.exe --gtest_list_tests
+.\cmake-build-debug\tests\batchguard_tests.exe --gtest_list_tests
 ```
 
 运行一个测试套件：
 
 ```powershell
-.\build\debug\batchguard_tests.exe --gtest_filter=InputValidatorTest.*
+.\cmake-build-debug\tests\batchguard_tests.exe --gtest_filter=InputValidatorTest.*
 ```
 
 运行单个测试：
 
 ```powershell
-.\build\debug\batchguard_tests.exe --gtest_filter=InputValidatorTest.RejectsMissingPath
+.\cmake-build-debug\tests\batchguard_tests.exe `
+    --gtest_filter=InputValidatorTest.RejectsMissingPath
 ```
 
 重复运行：
 
 ```powershell
-.\build\debug\batchguard_tests.exe --gtest_repeat=10
+.\cmake-build-debug\tests\batchguard_tests.exe --gtest_repeat=10
 ```
 
 随机顺序用于发现隐藏的顺序依赖：
 
 ```powershell
-.\build\debug\batchguard_tests.exe --gtest_shuffle
+.\cmake-build-debug\tests\batchguard_tests.exe --gtest_shuffle
+```
+
+只运行 GUI 测试：
+
+```powershell
+ctest --test-dir cmake-build-debug -R BatchGuardGuiTests --output-on-failure
 ```
 
 ## 11. 在 CLion 中使用
@@ -360,7 +374,18 @@ docs/测试/
 | 4 | `阶段4测试.md` | 大小筛选、SHA-256、零字节、读取失败 |
 | 5 | `阶段5测试.md` | 重复组、报告、排序、退出码 |
 | 6 | `阶段6测试.md` | M-01 至 M-11 完整回归 |
-| 7 | `阶段7测试.md` | 新环境构建、Release 交付、文档可用性 |
+| 7 | `阶段7测试.md` | 四阶段进度事件和控制台动态显示 |
+| 8 | `阶段8测试.md` | 有界并发、调度器和线程安全进度 |
+| 9 | `阶段9测试.md` | v0.1.0 最终交付回归 |
+| 10 | `阶段10测试.md` | Qt 构建、最小窗口和运行库部署 |
+| 11 | `阶段11测试.md` | 核心协作式取消和线程回收 |
+| 12 | `阶段12测试.md` | GUI 状态机和可替换执行边界 |
+| 13 | `阶段13测试.md` | 后台扫描、进度、取消和关闭 |
+| 14 | `阶段14测试.md` | 摘要、重复组、路径和失败模型 |
+| 15 | `阶段15测试.md` | GUI 自动化覆盖补强 |
+| 16 | `阶段16测试.md` | 结构化日志、双端展示和脱敏 |
+| 17 | `阶段17测试.md` | 真实目录、DPI、布局和人工验收 |
+| 18 | `阶段18测试.md` | Release、部署和干净环境启动 |
 
 阶段内每个功能增量都同步增加或更新测试；阶段测试文档汇总这些自动化结果，不用
 文档代替测试代码。
@@ -379,12 +404,13 @@ docs/测试/
 
 ## 15. 学习完成标准
 
-你能够独立完成以下操作，就掌握了第一版需要的 GTest：
+你能够独立完成以下操作，就掌握了当前项目需要的测试基础：
 
 - 解释 GoogleTest、CTest、CMake 和 CLion 的分工。
 - 使用 `TEST` 编写 Arrange、Act、Assert。
 - 正确选择 `EXPECT_*` 和 `ASSERT_*`。
 - 把测试源文件加入 `batchguard_tests`。
+- 区分 GoogleTest 与 Qt Test 的目标、依赖和 CTest 注册方式。
 - 在 CLion 和终端运行单个或全部测试。
 - 看懂失败信息并定位断言。
 - 使用临时目录构造文件场景。

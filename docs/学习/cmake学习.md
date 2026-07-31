@@ -17,7 +17,7 @@ CMakeLists.txt
 Ninja/Visual Studio 构建规则
       │ 编译、链接
       ▼
-batchguard_core.lib + BatchGuard.exe
+核心/支持静态库 + BatchGuard.exe + BatchGuardGui.exe + 测试程序
 ```
 
 常用流程分为四步：
@@ -36,52 +36,41 @@ CMakeLists.txt
 apps/
 include/
 src/
+tests/
+Third_Party/
 ```
 
-`cmake-build-debug/` 和 `build/` 是构建目录，保存缓存、目标文件、库和可执行
-程序。它们都可以由源码重新生成，不应手动修改，也不应提交 Git。
+`cmake-build-debug/` 和 `cmake-build-release/` 是当前约定的构建目录，保存缓存、
+目标文件、库、可执行程序和本机部署依赖。它们都可以由源码重新生成，不应手动
+修改，也不应提交 Git。早期文档中的 `build/debug`、`build/release` 只保留为
+历史记录，后续开发不要重新创建独立 `build/`。
 
 一个构建目录只能稳定地对应一套生成器、编译器和构建配置。切换生成器时应使用
 新的构建目录，不要在旧目录中混用。
 
 ## 3. 当前项目的目标关系
 
-当前项目包含两个 CMake 目标：
+当前项目包含五个基础目标，并在 GUI 选项开启时增加三个目标：
 
 ```text
-batchguard_cli
-      │ 链接
-      ▼
-batchguard_core
+batchguard_cli ──────> batchguard_cli_support ──────> batchguard_core
+                              │
+                              └─────────────────────> batchguard_logging
+
+batchguard_tests ────> batchguard_cli_support / batchguard_core / batchguard_logging
+
+batchguard_gui ───────> batchguard_gui_support ──────> batchguard_core
+                                      │
+                                      ├──────────────> batchguard_logging
+                                      └──────────────> Qt5::Widgets
+
+batchguard_gui_tests ─> batchguard_gui_support ──────> Qt5::Test
 ```
 
-从源文件到构建产物的过程是：
-
-```text
-batchguard_core.cpp
-          │ 编译
-          ▼
-batchguard_core.cpp.obj
-          │ 生成静态库
-          ▼
-batchguard_core.lib
-
-main.cpp
-    │ 编译
-    ▼
-main.cpp.obj
-    │
-    │ 与 batchguard_core.lib 一起链接
-    ▼
-BatchGuard.exe
-```
-
-因此，核心库和 CLI 不是两个互不相关的产物。`batchguard_core.lib` 会在链接阶段
-参与生成 `BatchGuard.exe`。
-
-- `batchguard_core` 是静态库，未来承载文件扫描、哈希和重复分组等核心逻辑。
-- `batchguard_cli` 是命令行程序，只负责程序入口和终端交互。
-- CLI 可以依赖核心库，核心库不能反向依赖 CLI。
+`batchguard_core` 承载扫描、哈希、取消和重复分组；`batchguard_logging` 提供
+标准 C++ 结构化日志；CLI/GUI 支持层负责各自应用逻辑；两个入口目标只做对象组装。
+基础测试使用 GoogleTest，GUI 测试使用 Qt Test，并由 CTest 统一运行。依赖始终
+从应用层指向核心层，核心库不能反向依赖 CLI、GUI 或日志输出设施。
 
 ## 4. 逐行理解当前 CMakeLists.txt
 
@@ -96,31 +85,31 @@ cmake_minimum_required(VERSION 4.2)
 ### 4.2 定义项目和语言
 
 ```cmake
-project(BatchGuard LANGUAGES CXX)
+project(BatchGuard VERSION 0.2.0 LANGUAGES CXX)
 ```
 
-项目名是 `BatchGuard`，只启用 C++。不启用未使用的 C 语言可以减少不必要的
-编译器检测。
+项目名是 `BatchGuard`，版本是 `0.2.0`，只启用 C++。项目版本通过编译定义进入
+CLI 的 `--version` 输出。
 
 ### 4.3 创建核心静态库
 
 ```cmake
 add_library(batchguard_core STATIC
-    src/core/batchguard_core.cpp
+    src/core/content_fingerprint.cpp
+    src/core/duplicate_group.cpp
+    src/core/file_discovery.cpp
+    src/core/file_hash_scheduler.cpp
+    src/core/file_hasher.cpp
+    src/core/input_validator.cpp
+    src/core/scanner.cpp
 )
 ```
 
 `add_library` 创建库目标，`STATIC` 表示静态库。在 Windows/MSVC 下通常生成
 `batchguard_core.lib`。括号中的 `.cpp` 是构建该目标所需的源文件。
 
-以后新增核心实现，例如 `src/core/file_scanner.cpp`，必须把它加入该目标：
-
-```cmake
-add_library(batchguard_core STATIC
-    src/core/batchguard_core.cpp
-    src/core/file_scanner.cpp
-)
-```
+新增核心实现时，必须把 `.cpp` 加入这个目标；公共头文件放入
+`include/batchguard/core/`，私有辅助头文件可留在 `src/core/`。
 
 ### 4.4 设置公共头文件搜索路径
 
@@ -134,10 +123,10 @@ target_include_directories(batchguard_core
 这让编译器从项目的 `include/` 开始寻找头文件，因此代码可以写：
 
 ```cpp
-#include <batchguard/core/batchguard_core.h>
+#include <batchguard/core/scanner.h>
 ```
 
-磁盘上的完整相对路径是 `include/batchguard/core/batchguard_core.h`。编译器已经
+磁盘上的完整相对路径是 `include/batchguard/core/scanner.h`。编译器已经
 把 `include/` 当作搜索起点，所以 `#include` 中不再重复写 `include/`。
 
 `CMAKE_CURRENT_SOURCE_DIR` 是当前 `CMakeLists.txt` 所在的源码目录。`PUBLIC`
@@ -167,20 +156,22 @@ add_executable(batchguard_cli
 ```cmake
 target_link_libraries(batchguard_cli
     PRIVATE
-        batchguard_core
+        batchguard_cli_support
 )
 ```
 
-CLI 链接核心静态库。`PRIVATE` 表示这个依赖只属于 CLI，不需要继续传递给其他
-目标。CMake 会确保先构建核心库，再链接 CLI。
+CLI 入口只链接 `batchguard_cli_support`。支持层再以 `PUBLIC` 方式链接核心库和
+日志库，因此 CMake 会按依赖顺序先构建静态库，再链接最终程序。
 
-因为核心库的头文件目录是 `PUBLIC`，CLI 链接核心库后也能包含其公共头文件。
+`PRIVATE` 表示入口自身使用支持层，但不会继续向其他消费者传播这个依赖。
 
 ### 4.7 固定 C++20
 
 ```cmake
 set_target_properties(
     batchguard_core
+    batchguard_logging
+    batchguard_cli_support
     batchguard_cli
     PROPERTIES
         CXX_STANDARD 20
@@ -189,11 +180,11 @@ set_target_properties(
 )
 ```
 
-- `CXX_STANDARD 20`：两个目标使用 C++20。
+- `CXX_STANDARD 20`：这些目标使用 C++20。
 - `CXX_STANDARD_REQUIRED YES`：不允许 CMake 自动降级到旧标准。
 - `CXX_EXTENSIONS NO`：关闭非标准编译器扩展，提升可移植性。
 
-这些属性同时应用于两个目标，避免核心库和 CLI 使用不同语言标准。
+GUI 支持层和 GUI 入口也设置相同属性，避免不同目标使用不同语言标准。
 
 ### 4.8 修改最终程序名
 
@@ -207,8 +198,8 @@ set_target_properties(batchguard_cli
 CMake 内部目标仍叫 `batchguard_cli`，最终文件名改为 `BatchGuard.exe`。因此：
 
 ```powershell
-cmake --build build/debug --target batchguard_cli
-.\build\debug\BatchGuard.exe
+cmake --build cmake-build-debug --target batchguard_cli
+.\cmake-build-debug\BatchGuard.exe
 ```
 
 一个使用“目标名”，另一个使用“输出文件名”。
@@ -218,31 +209,39 @@ cmake --build build/debug --target batchguard_cli
 ### 使用 CLion
 
 CLion 会读取 `CMakeLists.txt`，并在 `cmake-build-debug/` 中维护 Debug 构建。
-修改 CMake 配置后执行“Reload CMake Project”，再构建 `batchguard_cli`。
+修改 CMake 配置后执行“Reload CMake Project”。开发 GUI 时，Profile 还需要设置
+`BATCHGUARD_BUILD_GUI=ON` 和匹配 Qt 套件的 `CMAKE_PREFIX_PATH`。
 
 ### 使用终端
 
-先使用已经加载 MSVC 环境且能找到 Ninja 的终端，然后执行：
+先使用已经加载 MSVC 环境且能找到 Ninja 的终端，然后复用 CLion Profile 已配置
+的目录：
 
 ```powershell
-cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug
-.\build\debug\BatchGuard.exe
+cmake --build cmake-build-debug
+ctest --test-dir cmake-build-debug --output-on-failure
+.\cmake-build-debug\BatchGuard.exe
+.\cmake-build-debug\BatchGuardGui.exe
 ```
 
-参数含义：
-
-- `-S .`：源码目录是当前目录。
-- `-B build/debug`：把生成文件放到指定构建目录。
-- `-G Ninja`：使用 Ninja 生成器。
-- `-DCMAKE_BUILD_TYPE=Debug`：生成便于调试的版本。
-
-Release 使用独立目录：
+如果需要从命令行首次配置 Debug：
 
 ```powershell
-cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build/release
-.\build\release\BatchGuard.exe
+cmake -S . -B cmake-build-debug -G Ninja `
+    -DCMAKE_BUILD_TYPE=Debug `
+    -DBATCHGUARD_BUILD_GUI=ON `
+    -DBATCHGUARD_BUILD_TESTS=ON `
+    -DCMAKE_PREFIX_PATH="<Qt 5.14.2 msvc2017_64 目录>"
+```
+
+Release 使用独立的 `cmake-build-release/`，详细配置和部署边界见
+[v0.2.0部署说明.md](../交付/v0.2.0部署说明.md)：
+
+```powershell
+cmake --build cmake-build-release
+ctest --test-dir cmake-build-release --output-on-failure
+.\cmake-build-release\BatchGuard.exe
+.\cmake-build-release\BatchGuardGui.exe
 ```
 
 ## 6. 修改项目时如何同步 CMake
@@ -274,20 +273,20 @@ cmake --build build/release
 - CLI 依赖于 Core ，core 修改之后需要重新编译，那CLI就需要重新链接
 
 <p style="color: red;">
-<strong>标准参考：</strong>核心源文件重新编译后会生成新的 batchguard_core.lib。CLI 链接了该静态库，因此必须重新链接 BatchGuard.exe，才能包含最新的核心库代码；main.cpp 本身不一定重新编译。
+<strong>标准参考：</strong>核心源文件重新编译后会生成新的 batchguard_core.lib。batchguard_cli_support 公开依赖核心库，最终 BatchGuard.exe 必须重新链接才能包含最新代码；main.cpp 本身不一定重新编译。构建 GUI 或测试目标时，对应可执行程序也会按依赖关系重新链接。
 </p>
 
-3. 删除 `target_link_libraries` 后，CLI 是否还能继承核心库的公共头文件路径？
-- 应该不行吧，batchguard_core 可以访问头文件，CLI 通过 core 访问核心库头文件，不链接，CLI 怎么访问公共头文件
+3. 删除 CLI 的 `target_link_libraries` 后，入口还能继承支持层的头文件路径吗？
+- 不行，入口通过支持层目标获得头文件路径和实现依赖。
 
 <p style="color: red;">
-<strong>标准参考：</strong>不能。target_link_libraries 建立了 CLI 对核心库的依赖，核心库通过 PUBLIC 公开的 include 路径才会传播给 CLI。删除依赖后，除非单独给 CLI 配置头文件路径，否则当前 main.cpp 会找不到核心头文件。
+<strong>标准参考：</strong>不能。target_link_libraries 建立了 batchguard_cli 对 batchguard_cli_support 的依赖，支持层通过 PUBLIC 公开 apps/cli 头文件路径并继续传播核心依赖。删除后，main.cpp 无法获得 cli_app.h 的包含路径，链接时也没有 CLI 应用层实现。
 </p>
 
 ### 练习二：观察增量构建
 
 1. 先完整构建一次。
-2. 将启动文字改为 `BatchGuard stage 1.`。
+2. 修改 `apps/cli/main.cpp` 中的入口代码。
 3. 再次执行 `cmake --build`。
 4. 观察构建工具只处理发生变化的目标，而不是全部重建。
 - 按照依赖顺序只有main 会重新构建
@@ -305,7 +304,7 @@ cmake --build build/release
 - [3/3] Linking CXX executable BatchGuard.exe
 
 <p style="color: red;">
-<strong>标准参考：</strong>结果正确。example.cpp 被编译后，batchguard_core.lib 需要重新生成；因为 CLI 链接该静态库，BatchGuard.exe 也需要重新链接。未变化的现有源文件不会重复编译。
+<strong>标准参考：</strong>example.cpp 被编译后，batchguard_core.lib 需要重新生成。构建全部目标时，依赖核心库的 CLI、GUI 和测试可执行程序会按需重新链接；未变化的现有源文件不会重复编译。
 </p>
 
 ## 8. 常见问题
@@ -338,7 +337,7 @@ cmake --build build/release
 - `add_library`、`add_executable`、`target_link_libraries` 分别做什么。
 - add_library 应该是生成 .lib
 - add_executable 生成 .exe
-- target_link_libraries 连接 batchguard_cli batchguard_core
+- target_link_libraries 声明 batchguard_cli 对 batchguard_cli_support 等目标依赖
 
 <p style="color: red;">
 <strong>标准参考：</strong>add_library 定义库目标及其源文件，构建时生成 .lib；add_executable 定义可执行目标及其源文件，构建时生成 .exe；target_link_libraries 声明目标之间的链接和依赖关系。
@@ -353,18 +352,18 @@ cmake --build build/release
 - 为什么公共头文件在 `include/batchguard/` 下。
 
 <p style="color: red;">
-<strong>标准参考：</strong>include 是公共头文件根目录，batchguard 是项目专属前缀，可以避免与其他库的同名头文件冲突，并形成稳定的包含路径，例如 &lt;batchguard/core/batchguard_core.h&gt;。
+<strong>标准参考：</strong>include 是公共头文件根目录，batchguard 是项目专属前缀，可以避免与其他库的同名头文件冲突，并形成稳定的包含路径，例如 &lt;batchguard/core/scanner.h&gt;。
 </p>
 
 - 如何新增 `.cpp`，并让它进入正确目标。
-再规定cpp路径 新增文件后，再去cmakelist.txt里 add_executable 添加cpp 路径
+先确认源码属于核心、日志、CLI 支持层、GUI 支持层还是入口目标，再加入对应目标。
 
 <p style="color: red;">
-<strong>标准参考：</strong>先判断源文件属于哪个目标。核心实现加入 add_library(batchguard_core ...)；CLI 实现加入 add_executable(batchguard_cli ...)。重新配置后，CMake 才会把新文件纳入对应目标。
+<strong>标准参考：</strong>核心实现加入 add_library(batchguard_core ...)；CLI 应用实现加入 batchguard_cli_support；GUI 窗口或模型实现加入 batchguard_gui_support；只有程序入口或平台入口代码才加入相应 add_executable。重新配置后，CMake 才会把新文件纳入正确目标。
 </p>
 
 - 如何独立配置、构建和运行 Debug/Release。
 
 <p style="color: red;">
-<strong>标准参考：</strong>Debug 和 Release 应使用不同构建目录。先用 cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug 配置，再用 cmake --build build/debug 构建；Release 将目录和构建类型分别改为 build/release 与 Release，最后运行各自目录中的 BatchGuard.exe。
+<strong>标准参考：</strong>Debug 和 Release 使用 cmake-build-debug 与 cmake-build-release 两个独立目录。Profile 配置完成后分别执行 cmake --build 和 ctest --test-dir；GUI 目标还需要 BATCHGUARD_BUILD_GUI=ON 和匹配 Qt 套件的 CMAKE_PREFIX_PATH。
 </p>
