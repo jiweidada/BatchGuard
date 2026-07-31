@@ -1,12 +1,11 @@
 # BatchGuard
 
-BatchGuard 0.1.0 是一个使用 C++20 开发的 Windows 本地重复文件检查工具，支持
+BatchGuard 0.2.0 是一个使用 C++20 开发的 Windows 本地重复文件检查工具，支持
 单目录输入验证、递归普通文件发现、并发 SHA-256 内容指纹、重复分组、中文扫描
 报告和控制台动态进度。程序只读取输入目录，不删除、移动或修改文件。
 
-当前 v0.2.0 Debug 开发版还提供 Qt Widgets GUI：可选择目录、设置哈希线程数、
-在后台扫描和安全取消，并查看结论摘要、重复组、完整路径、处理失败详情和简化
-运行日志。
+Qt Widgets GUI 可选择目录、设置哈希线程数、在后台扫描和安全取消，并查看结论
+摘要、重复组、完整路径、处理失败详情和简化运行日志。
 
 ## 项目结构
 
@@ -58,8 +57,18 @@ ctest --test-dir cmake-build-debug --output-on-failure
 .\cmake-build-debug\BatchGuardGui.exe
 ```
 
-阶段 17 已完成 Debug GUI 真实目录、取消、关闭、日志和 DPI 验收。Release 配置、
-部署和完整验收在阶段 18 统一完成。
+Release：
+
+```powershell
+cmake --build cmake-build-release
+ctest --test-dir cmake-build-release --output-on-failure
+.\cmake-build-release\BatchGuard.exe --version
+.\cmake-build-release\BatchGuardGui.exe
+```
+
+阶段 18 已完成 Release CLI、GUI、CTest 和无 Qt 环境变量的隔离部署验收。独立
+部署步骤、运行库与许可证要求见
+[`docs/交付/v0.2.0部署说明.md`](docs/交付/v0.2.0部署说明.md)。
 
 ## 使用方式
 
@@ -167,8 +176,8 @@ ctest --test-dir cmake-build-debug --output-on-failure
 - `docs/测试/阶段7测试.md`：阶段 7 扫描进度事件和控制台动态显示。
 - `docs/测试/阶段8测试.md`：阶段 8 有界文件级并发和线程安全进度汇聚。
 - `docs/测试/阶段9测试.md`：阶段 9 最终交付验收。
-- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段17测试.md`：Qt 构建、取消、
-  GUI 状态、后台扫描、结果展示、自动化补强、结构化日志和真实界面验收。
+- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段18测试.md`：Qt 构建、取消、
+  GUI 状态、后台扫描、结果展示、自动化补强、结构化日志、真实界面和部署验收。
 - `docs/学习/`：CMake、GoogleTest 和 Git 学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。

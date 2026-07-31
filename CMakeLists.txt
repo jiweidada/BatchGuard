@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 4.2)
-project(BatchGuard VERSION 0.1.0 LANGUAGES CXX)
+project(BatchGuard VERSION 0.2.0 LANGUAGES CXX)
 
 option(BATCHGUARD_BUILD_TESTS "Build BatchGuard tests" ON)
 option(BATCHGUARD_BUILD_GUI "Build the BatchGuard Qt GUI" OFF)

@@ -1,6 +1,6 @@
 # BatchGuard v0.2.0 Qt 图形界面计划
 
-> 状态：阶段 17 人工界面与真实目录验收已完成，下一步为阶段 18 交付。
+> 状态：阶段 18 已完成，BatchGuard v0.2.0 已通过交付验收。
 >
 > 计划日期：2026-07-29。
 >
@@ -796,6 +796,21 @@ GUI 链接后由 CMake 调用同一 Qt 套件的 `windeployqt`，把本地运行
 Qt Windows 部署参考：
 
 - <https://doc.qt.io/qt-5/windows-deployment.html>
+
+实际结果（2026-07-31）：
+
+- 项目版本更新为 `0.2.0`，Debug 和 Release CLI 均输出正确版本号。
+- Release CLI、GUI 和测试成功构建；Debug、Release CTest 均为 88 项、0 失败、
+  1 项 Skipped。
+- Release GUI 测试连续运行 20 轮通过，真实 Release CLI 中文空格目录扫描通过。
+- 使用目标 Qt 套件生成独立部署目录，共 22 个文件且不包含 Debug Qt DLL。
+- 清除 Qt 环境变量并仅保留 Windows 系统 PATH 后，部署目录中的 CLI 和 GUI 均
+  正常运行并返回 `0`。
+- 部署目录包含 Qt 原始许可文件副本；发布材料记录动态链接、MSVC 运行库及正式
+  分发前的许可复核责任。
+- 构建、部署目录和 Qt DLL 均未提交。详细结果见
+  [阶段18测试.md](../测试/阶段18测试.md) 和
+  [v0.2.0部署说明.md](../交付/v0.2.0部署说明.md)。
 
 ## 10. 测试矩阵
 
