@@ -17,6 +17,8 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QTableView>
@@ -110,6 +112,7 @@ private slots:
     void failureModelExposesRowsColumnsAndErrorText();
     void guiLogModelKeepsSimplifiedBoundedRecords();
     void mainWindowRoutesSameLogsToPanelAndTerminal();
+    void mainWindowKeepsCompletedResultsReachableAtMinimumSize();
     void resultModelsHandleManyRowsWithoutCopyingReports();
     void mainWindowShowsCompleteReportAndHidesCancelledResults();
     void sortingDuplicateGroupsPreservesSelectedGroup();
@@ -892,6 +895,60 @@ void ScanControllerTest::mainWindowRoutesSameLogsToPanelAndTerminal() {
             formatLogRecord(record).find(directory.path().toStdString()) ==
             std::string::npos);
     }
+}
+
+void ScanControllerTest::mainWindowKeepsCompletedResultsReachableAtMinimumSize() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    auto execution = std::make_unique<FakeScanExecution>();
+    FakeScanExecution* executionPointer = execution.get();
+    MainWindow window{std::move(execution)};
+    window.resize(960, 760);
+    window.show();
+    auto* directoryInput =
+        window.findChild<QLineEdit*>(QStringLiteral("directoryLineEdit"));
+    auto* startButton =
+        window.findChild<QPushButton*>(QStringLiteral("startButton"));
+    QWidget* centralWidget = window.centralWidget();
+    QVERIFY(centralWidget);
+    QCOMPARE(
+        QString::fromLatin1(centralWidget->metaObject()->className()),
+        QStringLiteral("QScrollArea"));
+    auto* scrollArea = static_cast<QScrollArea*>(centralWidget);
+    auto* resultGroup =
+        window.findChild<QGroupBox*>(QStringLiteral("resultGroup"));
+    auto* logGroup =
+        window.findChild<QGroupBox*>(QStringLiteral("logGroup"));
+    auto* duplicateGroupTable =
+        window.findChild<QTableView*>(QStringLiteral("duplicateGroupTable"));
+    QVERIFY(directoryInput);
+    QVERIFY(startButton);
+    QVERIFY(resultGroup);
+    QVERIFY(logGroup);
+    QVERIFY(duplicateGroupTable);
+    QCoreApplication::processEvents();
+    QVERIFY(logGroup->height() <= 190);
+    window.setFixedSize(window.minimumSize());
+    QCoreApplication::processEvents();
+
+    directoryInput->setText(directory.path());
+    QTest::mouseClick(startButton, Qt::LeftButton);
+    auto report = std::make_shared<ScanReport>();
+    report->duplicateGroups.push_back({
+        1024U,
+        "hash",
+        {std::filesystem::path{"a.bin"}, std::filesystem::path{"b.bin"}}});
+    executionPointer->finishCompleted(
+        executionPointer->requests.front().scanId,
+        report);
+    QCoreApplication::processEvents();
+
+    QVERIFY(resultGroup->isVisible());
+    QVERIFY(scrollArea->verticalScrollBar()->maximum() > 0);
+    scrollArea->ensureWidgetVisible(resultGroup);
+    QCoreApplication::processEvents();
+    QVERIFY(duplicateGroupTable->isVisible());
+    QVERIFY(duplicateGroupTable->height() >= 150);
 }
 
 void ScanControllerTest::resultModelsHandleManyRowsWithoutCopyingReports() {

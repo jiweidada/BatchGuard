@@ -58,8 +58,8 @@ ctest --test-dir cmake-build-debug --output-on-failure
 .\cmake-build-debug\BatchGuardGui.exe
 ```
 
-当前 v0.2.0 开发阶段只维护 Debug Profile。Release 配置、部署和完整验收延后到
-交付阶段，不要求本地持续保留 `cmake-build-release/`。
+阶段 17 已完成 Debug GUI 真实目录、取消、关闭、日志和 DPI 验收。Release 配置、
+部署和完整验收在阶段 18 统一完成。
 
 ## 使用方式
 
@@ -167,8 +167,8 @@ ctest --test-dir cmake-build-debug --output-on-failure
 - `docs/测试/阶段7测试.md`：阶段 7 扫描进度事件和控制台动态显示。
 - `docs/测试/阶段8测试.md`：阶段 8 有界文件级并发和线程安全进度汇聚。
 - `docs/测试/阶段9测试.md`：阶段 9 最终交付验收。
-- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段16测试.md`：Qt 构建、取消、
-  GUI 状态、后台扫描、结果展示、自动化补强和结构化日志。
+- `docs/测试/阶段10测试.md` 至 `docs/测试/阶段17测试.md`：Qt 构建、取消、
+  GUI 状态、后台扫描、结果展示、自动化补强、结构化日志和真实界面验收。
 - `docs/学习/`：CMake、GoogleTest 和 Git 学习笔记。
 
 项目对被扫描目录保持只读，不提交构建产物、IDE 私有配置或个人业务数据。

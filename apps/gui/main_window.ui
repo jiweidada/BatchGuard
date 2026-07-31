@@ -19,8 +19,15 @@
   <property name="windowTitle">
    <string>BatchGuard 重复文件扫描</string>
   </property>
-  <widget class="QWidget" name="centralWidget">
-   <layout class="QVBoxLayout" name="centralLayout">
+  <widget class="QScrollArea" name="centralWidget">
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="widgetResizable">
+    <bool>true</bool>
+   </property>
+   <widget class="QWidget" name="scrollContentWidget">
+    <layout class="QVBoxLayout" name="centralLayout">
     <property name="spacing">
      <number>12</number>
     </property>
@@ -193,6 +200,9 @@
     </item>
     <item>
      <widget class="QGroupBox" name="logGroup">
+      <property name="maximumSize">
+       <size><width>16777215</width><height>190</height></size>
+      </property>
       <property name="title">
        <string>运行日志</string>
       </property>
@@ -200,7 +210,10 @@
        <item>
         <widget class="QListView" name="logListView">
          <property name="minimumSize">
-          <size><width>0</width><height>120</height></size>
+          <size><width>0</width><height>80</height></size>
+         </property>
+         <property name="maximumSize">
+          <size><width>16777215</width><height>120</height></size>
          </property>
          <property name="editTriggers">
           <set>QAbstractItemView::NoEditTriggers</set>
@@ -478,7 +491,8 @@
       </layout>
      </widget>
     </item>
-   </layout>
+    </layout>
+   </widget>
   </widget>
  </widget>
  <tabstops>
